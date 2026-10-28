@@ -1,0 +1,48 @@
+name: Release
+# Push a tag like v0.2.0 to build, sign and publish the APK (GitHub) and AAB (Google Play).
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: "17" }
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Restore the signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.SIFT_KEYSTORE_BASE64 }}
+        run: |
+          # Never publish a debug-signed build: users couldn't update over it later.
+          if [ -z "$KEYSTORE_BASE64" ]; then echo "::error::SIFT_KEYSTORE_BASE64 secret is missing"; exit 1; fi
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          echo "SIFT_KEYSTORE_STORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+      - name: Test, build and sign
+        env:
+          SIFT_KEYSTORE_STORE_PASSWORD: ${{ secrets.SIFT_KEYSTORE_STORE_PASSWORD }}
+          SIFT_KEYSTORE_KEY_ALIAS: ${{ secrets.SIFT_KEYSTORE_KEY_ALIAS }}
+          SIFT_KEYSTORE_KEY_PASSWORD: ${{ secrets.SIFT_KEYSTORE_KEY_PASSWORD }}
+        run: ./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleRelease :app:bundleRelease
+      - name: Name and checksum the files
+        run: |
+          v="${GITHUB_REF_NAME#v}"
+          mkdir dist
+          cp app/build/outputs/apk/release/app-release.apk "dist/NotiSift-$v.apk"
+          cp app/build/outputs/bundle/release/app-release.aab "dist/NotiSift-$v.aab"
+          (cd dist && sha256sum * > SHA256SUMS.txt)
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" dist/* --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" dist/* --title "NotiSift ${GITHUB_REF_NAME#v}" --generate-notes
+          fi
+      - name: Remove the signing key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/release.jks"

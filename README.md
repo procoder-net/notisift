@@ -1,6 +1,26 @@
 # NotiSift
 
+[![CI](https://github.com/procoder-net/notisift/actions/workflows/ci.yml/badge.svg)](https://github.com/procoder-net/notisift/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/procoder-net/notisift)](https://github.com/procoder-net/notisift/releases/latest)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![Android 8.0+](https://img.shields.io/badge/Android-8.0%2B-3DDC84)
+
 **An open-source Android app that sorts your notification drawer: what matters stays on top, the noise waits quietly, junk disappears.**
+
+> ### 🤖 An AI decision-model drawer
+> Plug in a **decision model** and NotiSift reads each notification the moment it arrives, decides
+> **Important, Later or Junk** and picks its group, then rebuilds your drawer around those decisions:
+> ⭐ what needs you on top, everything else in quiet **Day → group → notification** stacks.
+>
+> - **Any model, your key:** Perplexity's decision models, OpenAI, Anthropic, Gemini, OpenRouter, Groq, or a model
+>   on your own network (Ollama, LM Studio). Paste one key; the provider is detected for you.
+> - **Per notification, not per app:** "show Amazon deliveries, hide Amazon deals" works because each notification
+>   is decided on its own.
+> - **Your rules always win:** codes, chats, calls and alarms never leave the phone, your choices beat the model,
+>   and if the model is slow or unsure the notification simply stays in the drawer.
+> - **No AI? Still works.** Built-in on-phone rules make the same decisions offline. The model makes them sharper.
+>
+> [How the decision model plugs in ↓](#any-decision-model) · [Download the APK](https://github.com/procoder-net/notisift/releases/latest) · [Contribute](#contributing)
 
 NotiSift (*notification + sift*) reads every notification as it arrives and files it into one of three tiers.
 It works fully offline with built-in rules, and gets smarter with any AI model you choose (Perplexity, OpenAI,
@@ -70,14 +90,25 @@ so the Later pile stays readable instead of being one long list.
    …
 ```
 
+Or, with **By day** on, one stack per day that opens three levels deep:
+
+```
+🕓 Today · 16                 ← tap the stack: one row per group
+   💬 People & messages · 5      ← expand a row (⌄): its newest notifications
+   👥 Social activity · 3           Instagram: Sam liked your photo …
+   ➕ More groups · 4             ← the small groups share one row: 📈 1 · ✈️ 1 · 📦 1 …
+📅 Yesterday · 2
+```
+
 <p align="center">
   <img src="docs/screenshots/10-drawer-important.png" width="420" alt="The drawer's Important stack: only messages from people, a code, a delivery arriving and a reminder">
 </p>
 <sub>The demo's ⭐ Important stack in the real Android drawer: nine things that need you, nothing else.</sub>
 
-Prefer dates? Tap **By day** on Home and the waiting rows become `🕓 Today · 11`, `📅 Yesterday · 2`,
-`📅 Saturday · 1`… going back a week (older days merge into one *Earlier* row), so nothing drops out of the drawer
-after a day. Each line keeps its group emoji (📦 Amazon: Out for delivery).
+Prefer dates? Tap **By day** on Home. The drawer then shows Today, Yesterday and an *Earlier* stack for the rest of
+the week, so nothing drops out after a day. Inside each day the biggest groups get their own row and the small ones
+share a *More groups* row, which keeps NotiSift well under Android's limit of about 50 notifications per app. The
+Home tab mirrors it: day → group → notification, each level tap-to-open.
 
 Calls, alarms, navigation, media, timers, downloads and Android's own system notices are never touched.
 
@@ -337,7 +368,33 @@ adb shell pm grant io.github.notisift.testsender android.permission.POST_NOTIFIC
 ./scripts/e2e-deeplink.sh "Alice"     # phone unlocked, NotiSift turned on
 ```
 
-To publish your own release, replace the debug `signingConfig` in `app/build.gradle.kts` with your own key.
+### Releases
+
+Pushing a `v*` tag runs [`.github/workflows/release.yml`](.github/workflows/release.yml): it tests, builds a
+signed **APK** (for GitHub) and **AAB** (for Google Play), and attaches both to a GitHub release with their SHA-256.
+Signing uses four repository secrets (`SIFT_KEYSTORE_BASE64`, `SIFT_KEYSTORE_STORE_PASSWORD`,
+`SIFT_KEYSTORE_KEY_ALIAS`, `SIFT_KEYSTORE_KEY_PASSWORD`); without them the workflow stops rather than publish a
+debug-signed build. Locally, put the same values in a gitignored `keystore.properties`
+(`storeFile`, `storePassword`, `keyAlias`, `keyPassword`) and run `./gradlew :app:assembleRelease :app:bundleRelease`.
+
+## Contributing
+
+NotiSift gets better with every phone it runs on, and contributions are very welcome, no Android experience needed
+for most of them:
+
+- **🗂️ A notification landed in the wrong place?** [Open a "wrong sort" issue](https://github.com/procoder-net/notisift/issues/new?template=wrong-sort.yml)
+  with the app, roughly what it said (no personal details) and where it should have gone. These become new rules
+  and tests.
+- **📱 Tested on a phone or launcher we haven't?** Tell us how the drawer looked: One UI, Pixel, MIUI, ColorOS,
+  OxygenOS and others order stacks differently.
+- **🤖 A decision model or provider we don't support?** Adding one is a small `DecisionModel` (see
+  [Any decision model](#any-decision-model)).
+- **🌍 Translations, accessibility, docs, screenshots** (demo build only, never real notifications).
+- **🐛 Bugs and ideas:** [open an issue](https://github.com/procoder-net/notisift/issues/new/choose).
+
+Read [CONTRIBUTING.md](CONTRIBUTING.md) for setup and the few rules (tests for engine changes, no secrets, no real
+notification content in issues, screenshots or tests). Every change goes through a pull request; CI must pass and a
+maintainer reviews and merges.
 
 ## Credits
 

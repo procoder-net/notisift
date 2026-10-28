@@ -1,0 +1,12 @@
+name: 💡 Idea
+description: Suggest a feature, a decision model or a better default
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes: { label: What's annoying today, placeholder: "My group chats bury the one message from my manager…" }
+    validations: { required: true }
+  - type: textarea
+    id: idea
+    attributes: { label: What would help }
+    validations: { required: true }

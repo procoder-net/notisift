@@ -1,0 +1,29 @@
+name: 🗂️ Wrong sort
+description: A notification landed in the wrong place (Important, Later, Junk or the wrong group)
+labels: ["wrong-sort"]
+body:
+  - type: markdown
+    attributes:
+      value: "Thanks! These reports become new rules and tests. **Please rewrite any personal details** (names, codes, amounts, addresses)."
+  - type: input
+    id: app
+    attributes: { label: App, placeholder: "Amazon Shopping (com.amazon.mShop.android.shopping)" }
+    validations: { required: true }
+  - type: textarea
+    id: notification
+    attributes: { label: "What the notification said (made-up details)", placeholder: "Title: Your package is out for delivery\nText: Arriving today by 8 pm" }
+    validations: { required: true }
+  - type: dropdown
+    id: got
+    attributes: { label: Where it went, options: ["⭐ Important", "🕓 Later", "🗑️ Junk", "Wrong group"] }
+    validations: { required: true }
+  - type: input
+    id: expected
+    attributes: { label: Where it should go, placeholder: "⭐ Important, Orders & deliveries" }
+    validations: { required: true }
+  - type: input
+    id: why
+    attributes: { label: '"Why" line shown in NotiSift (tap the card)', placeholder: "Offline rules: promotion keywords" }
+  - type: dropdown
+    id: model
+    attributes: { label: Decision model, options: ["None (offline rules)", "Perplexity", "OpenAI", "Anthropic", "Gemini", "OpenRouter", "Groq", "Ollama / LM Studio", "Other"] }
