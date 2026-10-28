@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- HTTPS everywhere. Cleartext is permitted only so a self-hosted model (Ollama/LM Studio) on
+     your LAN works; LlmClient refuses plain HTTP to any non-private host. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors><certificates src="system" /></trust-anchors>
+    </base-config>
+</network-security-config>

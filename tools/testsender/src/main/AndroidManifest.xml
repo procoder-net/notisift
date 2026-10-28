@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <application android:label="NotiSift Test Sender" android:icon="@android:drawable/sym_action_chat">
+        <activity android:name=".PostActivity" android:exported="true" android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+        <activity android:name=".ChatActivity" android:exported="false" />
+    </application>
+</manifest>
