@@ -396,12 +396,10 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) for setup and the few rules (tests for e
 notification content in issues, screenshots or tests). Every change goes through a pull request; CI must pass and a
 maintainer reviews and merges.
 
-## Credits
+## Tested on
 
-Inspired by [notiq](https://github.com/chengyongru/notiq) (rule-guided remote decisions, observe first) and
-[JevNoiseGate](https://github.com/ufec/jev-block-android-ad) (fail-open pipeline, local rules before models,
-config-driven categories). Built and tested on a Galaxy Z Fold: the inner screen gets a navigation rail and
-two-pane layouts.
+Samsung Galaxy Z Fold (One UI, Android 17): the cover screen and the inner screen, which gets a navigation rail
+and two-pane layouts. Tried it on another phone? [Tell us how it went](#contributing).
 
 ## License
 
