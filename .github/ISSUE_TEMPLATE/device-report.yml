@@ -1,0 +1,36 @@
+name: 📱 Device report
+description: How NotiSift behaves on your phone or launcher (works, partly works, or broken)
+labels: ["device-report"]
+body:
+  - type: markdown
+    attributes:
+      value: "Thanks! Please use **made-up text only**. No real names, messages, codes or amounts. Screenshots from the demo build (`assembleDemo`) are best."
+  - type: input
+    id: device
+    attributes: { label: "Phone, Android version, skin/launcher", placeholder: "Pixel 8, Android 16, Pixel Launcher" }
+    validations: { required: true }
+  - type: input
+    id: version
+    attributes: { label: NotiSift version, placeholder: "0.1.1" }
+    validations: { required: true }
+  - type: dropdown
+    id: overall
+    attributes: { label: Overall, options: ["Works", "Mostly works", "Broken"] }
+    validations: { required: true }
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: What did you check?
+      options:
+        - label: Important stack shows at the top of the drawer
+        - label: Tapping an Important row opens the exact chat
+        - label: Reply buttons on Important rows work
+        - label: Later rows show one silent row per group
+        - label: Listener keeps running overnight (battery saver)
+        - label: Quick Settings tile switches sorting / Preview
+  - type: textarea
+    id: notes
+    attributes: { label: What looked different, description: "How stacks collapse or order, anything cut off, battery-saver settings you had to change." }
+  - type: textarea
+    id: shots
+    attributes: { label: Screenshots, description: "Demo build or fully redacted only." }

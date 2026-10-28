@@ -2,10 +2,16 @@
 
 [![CI](https://github.com/procoder-net/notisift/actions/workflows/ci.yml/badge.svg)](https://github.com/procoder-net/notisift/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/procoder-net/notisift)](https://github.com/procoder-net/notisift/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/procoder-net/notisift/total)](https://github.com/procoder-net/notisift/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Android 8.0+](https://img.shields.io/badge/Android-8.0%2B-3DDC84)
 
-**An open-source Android app that sorts your notification drawer: what matters stays on top, the noise waits quietly, junk disappears.**
+**Show Amazon deliveries, hide Amazon deals.** Android only lets you control notifications per app or channel.
+NotiSift decides **per notification**: what matters stays on top, the noise waits quietly, junk disappears.
+
+<p align="center">
+  <img src="docs/demo.gif" width="360" alt="Animated demo: a long drawer of notifications sorted into Important, Later and Junk, then real NotiSift screens (demo data)">
+</p>
 
 > ### 🤖 An AI decision-model drawer
 > Plug in a **decision model** and NotiSift reads each notification the moment it arrives, decides
@@ -13,27 +19,45 @@
 > ⭐ what needs you on top, everything else in quiet **Day → group → notification** stacks.
 >
 > - **Any model, your key:** Perplexity's decision models, OpenAI, Anthropic, Gemini, OpenRouter, Groq, or a model
->   on your own network (Ollama, LM Studio). Paste one key; the provider is detected for you.
-> - **Per notification, not per app:** "show Amazon deliveries, hide Amazon deals" works because each notification
->   is decided on its own.
+>   on your own network (Ollama, LM Studio). Paste one key; the provider is detected for you. No account, no server.
+> - **Per notification, not per app:** each notification is decided on its own, so one app's deliveries and deals
+>   can land in different places.
 > - **Your rules always win:** codes, chats, calls and alarms never leave the phone, your choices beat the model,
 >   and if the model is slow or unsure the notification simply stays in the drawer.
 > - **No AI? Still works.** Built-in on-phone rules make the same decisions offline. The model makes them sharper.
->
-> [How the decision model plugs in ↓](#any-decision-model) · [Download the APK](https://github.com/procoder-net/notisift/releases/latest) · [Contribute](#contributing)
-
-NotiSift (*notification + sift*) reads every notification as it arrives and files it into one of three tiers.
-It works fully offline with built-in rules, and gets smarter with any AI model you choose (Perplexity, OpenAI,
-Anthropic, Gemini, OpenRouter, Groq, or your own Ollama/LM Studio server). Nothing is deleted: everything it moves
-stays in the app for as long as you choose.
+> - **Nothing is lost:** Later and Junk stay in the app (14 days by default). New installs start in **Preview**,
+>   where nothing moves until you say so.
 
 <p align="center">
-  <img src="docs/screenshots/02-home-important.png" width="260" alt="Home screen: Sorting status, Important, Later and Junk tiers">
-  <img src="docs/screenshots/04-later-groups.png" width="260" alt="Later tier grouped into Orders, Smart home and Stocks">
-  <img src="docs/screenshots/07-apps.png" width="260" alt="Apps screen with a per-app choice">
+  <a href="https://github.com/procoder-net/notisift/releases/latest"><b>⬇️ Download the latest APK</b></a>
+  · <a href="#get-started">Setup guide</a>
+  · <a href="#any-decision-model">How the decision model plugs in</a>
+  · <a href="#contributing">Contribute</a>
+</p>
+
+NotiSift is short for *notification + sift*.
+
+## Screenshots
+
+<p align="center">
+  <img src="docs/screenshots/10-drawer-important.png" width="420" alt="The drawer's Important stack: only messages from people, a code, a delivery arriving and a reminder">
+</p>
+<p align="center">
+  <img src="docs/screenshots/02-home-important.png" width="220" alt="Home screen: Sorting status, Important, Later and Junk tiers">
+  <img src="docs/screenshots/04-later-groups.png" width="220" alt="Later tier grouped into Orders, Smart home and Stocks">
+  <img src="docs/screenshots/05-junk.png" width="220" alt="Junk tier: review requests and promos">
 </p>
 
 <sub>All screenshots use the built-in demo data (`assembleDemo`, see below). Every name and message in them is made up.</sub>
+
+## How it decides (short version)
+
+1. **Protected first.** Codes, chats from people, calls, alarms and ongoing notifications are decided on the phone and never hidden automatically.
+2. **Your rules next.** Per-app choices, per-chat settings and your swipe corrections beat everything else.
+3. **Then the model or the offline rules** pick Important, Later or Junk, plus a group (People & messages, Codes & security, Money & bills, Orders & deliveries…).
+4. **Unsure? It stays in the drawer.** Anything slow or uncertain fails open.
+
+Full details: [How it works](#how-it-works) · [Any decision model](#any-decision-model) · [Privacy](#privacy)
 
 ## Why
 
@@ -398,12 +422,16 @@ for most of them:
 - **🗂️ A notification landed in the wrong place?** [Open a "wrong sort" issue](https://github.com/procoder-net/notisift/issues/new?template=wrong-sort.yml)
   with the app, roughly what it said (no personal details) and where it should have gone. These become new rules
   and tests.
-- **📱 Tested on a phone or launcher we haven't?** Tell us how the drawer looked: One UI, Pixel, MIUI, ColorOS,
+- **📱 Tested on a phone or launcher we haven't?** [Send a device report](https://github.com/procoder-net/notisift/issues/new?template=device-report.yml)
+  telling us how the drawer looked: One UI, Pixel, MIUI, ColorOS,
   OxygenOS and others order stacks differently.
 - **🤖 A decision model or provider we don't support?** Adding one is a small `DecisionModel` (see
   [Any decision model](#any-decision-model)).
 - **🌍 Translations, accessibility, docs, screenshots** (demo build only, never real notifications).
 - **🐛 Bugs and ideas:** [open an issue](https://github.com/procoder-net/notisift/issues/new/choose).
+- **👋 First time?** Pick an issue labelled
+  [`good first issue`](https://github.com/procoder-net/notisift/labels/good%20first%20issue): small, scoped, with a
+  "done when" check.
 
 Read [CONTRIBUTING.md](CONTRIBUTING.md) for setup and the few rules (tests for engine changes, no secrets, no real
 notification content in issues, screenshots or tests). Every change goes through a pull request; CI must pass and a
@@ -412,7 +440,7 @@ maintainer reviews and merges.
 ## Tested on
 
 Samsung Galaxy Z Fold (One UI, Android 17): the cover screen and the inner screen, which gets a navigation rail
-and two-pane layouts. Tried it on another phone? [Tell us how it went](#contributing).
+and two-pane layouts. Tried it on another phone? [Send a device report](https://github.com/procoder-net/notisift/issues/new?template=device-report.yml).
 
 ## License
 
