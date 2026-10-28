@@ -46,8 +46,8 @@ android {
         applicationId = "io.github.notisift"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.1.1"
         buildConfigField("String", "ENV_PROVIDER", quoted(envValue("SIFT_PROVIDER").second))
         buildConfigField("String", "ENV_BASE_URL", quoted(envValue("SIFT_BASE_URL").second))
         buildConfigField("String", "ENV_MODEL", quoted(envValue("SIFT_MODEL").second))
