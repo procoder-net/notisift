@@ -59,7 +59,7 @@ import io.github.notisift.engine.Tier
  * lives in exactly one place, so important ones are not listed here again.
  */
 @Composable
-fun HomeScreen(vm: MainViewModel, modifier: Modifier, tier: String, onTier: (String) -> Unit, selectedCategory: String?, onCategory: (String?) -> Unit) {
+fun HomeScreen(vm: MainViewModel, modifier: Modifier, tier: String, onTier: (String) -> Unit, selectedCategory: String?, onCategory: (String?) -> Unit, onAddAiKey: () -> Unit) {
     val entries by vm.entries.collectAsState()
     val shown = Tier.fromId(tier) ?: Tier.LATER
     val counts = remember(entries) { entries.groupingBy { Tier.of(it.action) }.eachCount() }
@@ -71,6 +71,9 @@ fun HomeScreen(vm: MainViewModel, modifier: Modifier, tier: String, onTier: (Str
     val byDay = settings?.groupByDay == true
     val busy by vm.busyChats.collectAsState()
     var busyDismissed by rememberSaveable { mutableStateOf(false) }
+    val policies by vm.policies.collectAsState()
+    // Offered once the apps are set up, never during the first-run steps, and gone for good after "Not now".
+    val offerAi = settings?.let { !it.aiTipDismissed && !it.stopped && it.aiEnabled } == true && policies.isNotEmpty() && vm.cloudProvider() == null
     // Same notifications either way: by group (Orders, News…) or split into Today, Yesterday, Monday…
     val sections = remember(visible, byDay) {
         if (byDay) {
@@ -92,6 +95,7 @@ fun HomeScreen(vm: MainViewModel, modifier: Modifier, tier: String, onTier: (Str
                 }
             }
         }
+        if (offerAi) item(key = "ai") { AiKeyCard(onAddKey = onAddAiKey, onNotNow = { vm.updateSettings { it.copy(aiTipDismissed = true) } }) }
         if (busy.isNotEmpty() && !busyDismissed) item(key = "busy") { BusyChatsCard(busy, onMentions = { vm.setChatModes(busy, ChatMode.MENTIONS) }, onLater = { busyDismissed = true }) }
         if (filtered.isNotEmpty()) item(key = "clear-all") {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {

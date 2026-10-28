@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import io.github.notisift.BuildConfig
 import io.github.notisift.SiftApp
 import io.github.notisift.data.AppSettings
+import io.github.notisift.data.CachedDecision
 import io.github.notisift.data.Entry
 import io.github.notisift.data.Policy
 import io.github.notisift.engine.Action
@@ -31,6 +32,8 @@ import io.github.notisift.scan.PolicyAdvisor
 import io.github.notisift.scan.Suggestion
 import io.github.notisift.service.SiftListener
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -198,6 +201,90 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun setStopped(stopped: Boolean) = viewModelScope.launch { app.settingsStore.update { it.copy(stopped = stopped) } }
 
     /** The cloud provider decisions go to, or null when everything is decided on this phone. */
+    /** Saves choices and corrections to [uri] (picked with Android's file picker). Never the key or history. */
+    fun exportBackup(uri: android.net.Uri) = viewModelScope.launch {
+        _toast.value = try {
+            val file = io.github.notisift.data.Backup.build(app.awaitSettings(), dao.allPolicies(), dao.corrections(), System.currentTimeMillis())
+            withContext(Dispatchers.IO) {
+                app.contentResolver.openOutputStream(uri, "wt")?.use { it.write(io.github.notisift.data.Backup.encode(file).toByteArray()) }
+                    ?: error("Couldn't write the file")
+            }
+            "Saved ${file.apps.size} app choices and ${file.corrections.size} corrections. Your API key is not in the file."
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            "Export failed: ${e.message}"
+        }
+    }
+
+    /** Reads a backup and merges it in: its apps and corrections win, apps it doesn't mention keep their choice. */
+    fun importBackup(uri: android.net.Uri) = viewModelScope.launch {
+        _toast.value = try {
+            val text = withContext(Dispatchers.IO) {
+                app.contentResolver.openInputStream(uri)?.use { input ->
+                    // Read one byte past the limit so an oversized file is rejected, not truncated into valid JSON.
+                    // (InputStream.readNBytes needs Android 13; this works back to 8.)
+                    val out = java.io.ByteArrayOutputStream()
+                    val buffer = ByteArray(64 * 1024)
+                    while (out.size() <= io.github.notisift.data.Backup.MAX_BYTES) {
+                        val n = input.read(buffer)
+                        if (n < 0) break
+                        out.write(buffer, 0, n)
+                    }
+                    out.toString(Charsets.UTF_8.name())
+                } ?: error("Couldn't open the file")
+            }
+            val file = io.github.notisift.data.Backup.decode(text)
+            val existing = dao.allPolicies().associateBy { it.packageName }
+            dao.upsertPolicies(file.apps.map { a ->
+                (existing[a.packageName] ?: Policy(a.packageName, a.label.ifBlank { a.packageName }, a.mode))
+                    .copy(mode = a.mode, instructions = a.instructions, updatedAt = System.currentTimeMillis())
+            })
+            dao.upsertCache(file.corrections.map { c ->
+                CachedDecision(c.templateKey, c.action, c.category, 1.0, Source.CORRECTION.name, c.reason, System.currentTimeMillis(), pinned = true)
+            })
+            app.settingsStore.update { io.github.notisift.data.Backup.applyTo(it, file.settings) }
+            app.digest.requestRefresh()
+            val summary = io.github.notisift.data.ImportSummary(file.apps.size, file.corrections.size)
+            "Imported ${summary.apps} app choices and ${summary.corrections} corrections." +
+                if (app.awaitSettings().modelConfig.isUsable || file.settings.provider.isBlank()) "" else " Paste your API key in Settings → Advanced to turn the AI back on."
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: IllegalArgumentException) {
+            e.message ?: "That file isn't a NotiSift backup."
+        } catch (e: Exception) {
+            "Import failed: ${e.message}"
+        }
+    }
+
+    private val _connecting = MutableStateFlow(false)
+    val connecting = _connecting.asStateFlow()
+
+    /** Signs in on openrouter.ai and comes back with the user's own key, then saves and tests it. */
+    fun connectOpenRouter() = viewModelScope.launch {
+        if (_connecting.value) return@launch
+        _connecting.value = true
+        try {
+            val key = io.github.notisift.llm.OpenRouterConnect().connect(BuildConfig.APPLICATION_ID) { url ->
+                app.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+            }
+            val draft = app.awaitSettings().copy(provider = io.github.notisift.llm.ProviderKind.OPENROUTER.id, apiKey = key, baseUrl = "", model = "", aiEnabled = true)
+            testConnection(draft).join()
+            _toast.value = if (_connection.value.ok == true) "Connected to OpenRouter" else "Got your OpenRouter key, but the test failed. See Settings → Advanced."
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            _toast.value = e.message ?: "Couldn't connect to OpenRouter"
+        } finally {
+            _connecting.value = false
+        }
+    }
+
+    /** Set by Home's "Add a key" so Settings opens with the AI section showing; read once. */
+    private var openAiSetup = false
+    fun requestAiSetup() { openAiSetup = true }
+    fun takeAiSetupRequest(): Boolean = openAiSetup.also { openAiSetup = false }
+
     fun cloudProvider(): String? = app.currentModel()?.let { app.settings.value?.modelConfig?.kind?.label }
 
     /** False when Android would hide NotiSift's own rows, so the drawer can't show what it moved. */

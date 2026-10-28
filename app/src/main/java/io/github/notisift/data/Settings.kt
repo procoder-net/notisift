@@ -35,6 +35,8 @@ data class AppSettings(
     val tourDone: Boolean = false,
     /** Home lists by calendar day instead of by group. */
     val groupByDay: Boolean = false,
+    /** "Not now" on Home's add-an-AI card: it stays hidden after that (Settings still has the guide). */
+    val aiTipDismissed: Boolean = false,
     /** Per-chat choices, one "mode\tpackage\tchat" per line (see ChatRules). */
     val chatRules: String = "",
     /** Comma-separated names people @mention the user by. */
@@ -79,6 +81,7 @@ class SettingsStore(private val context: Context) {
         val stopped = booleanPreferencesKey("stopped")
         val tourDone = booleanPreferencesKey("tour_done")
         val groupByDay = booleanPreferencesKey("group_by_day")
+        val aiTipDismissed = booleanPreferencesKey("ai_tip_dismissed")
         val chatRules = stringPreferencesKey("chat_rules")
         val myNames = stringPreferencesKey("my_names")
         val threshold = doublePreferencesKey("threshold")
@@ -106,6 +109,7 @@ class SettingsStore(private val context: Context) {
             stopped = p[K.stopped] ?: d.stopped,
             tourDone = p[K.tourDone] ?: d.tourDone,
             groupByDay = p[K.groupByDay] ?: d.groupByDay,
+            aiTipDismissed = p[K.aiTipDismissed] ?: d.aiTipDismissed,
             chatRules = p[K.chatRules] ?: d.chatRules,
             myNames = p[K.myNames] ?: d.myNames,
             threshold = p[K.threshold] ?: d.threshold,
@@ -132,6 +136,7 @@ class SettingsStore(private val context: Context) {
         p[K.stopped] = s.stopped
         p[K.tourDone] = s.tourDone
         p[K.groupByDay] = s.groupByDay
+        p[K.aiTipDismissed] = s.aiTipDismissed
         p[K.chatRules] = s.chatRules.take(20_000)
         p[K.myNames] = s.myNames.take(500)
         p[K.threshold] = s.threshold.coerceIn(0.5, 0.99)

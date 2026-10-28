@@ -38,6 +38,7 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -75,6 +76,14 @@ fun AppsScreen(vm: MainViewModel, modifier: Modifier) {
         policies.filter { filter.matches(it, active) }.filter { query.isBlank() || it.label.contains(query, true) || it.packageName.contains(query, true) }
     }
     val pending = policies.filter { AppFilter.PENDING.matches(it, active) }
+    // "Use all" never blocks or silences an app (see applySuggestions), so those wait for one tap each.
+    val (needsTap, bulk) = pending.partition { AppMode.fromId(it.suggestedMode).let { m -> m == AppMode.BLOCK || m == AppMode.SILENCE } }
+    // A finished scan jumps to what it suggested, so the button visibly did something even when little changed.
+    var wasScanning by remember { mutableStateOf(false) }
+    LaunchedEffect(scan.running) {
+        if (wasScanning && !scan.running && pending.isNotEmpty()) filter = AppFilter.PENDING
+        wasScanning = scan.running
+    }
 
     LazyVerticalGrid(
         columns = GridCells.Adaptive(minSize = 340.dp),
@@ -98,12 +107,28 @@ fun AppsScreen(vm: MainViewModel, modifier: Modifier) {
                         Button(onClick = { vm.scanDevice() }, enabled = !scan.running) {
                             Icon(Icons.Outlined.AutoAwesome, null); Spacer(Modifier.width(6.dp)); Text(if (scan.running) "Scanning…" else "Suggest for all apps")
                         }
-                        if (pending.isNotEmpty() && !scan.running) {
-                            FilledTonalButton(onClick = { vm.applySuggestions(pending.map(::toSuggestion)) }) { Text("Use all ${pending.size}") }
+                        if (bulk.isNotEmpty() && !scan.running) {
+                            FilledTonalButton(onClick = { vm.applySuggestions(bulk.map(::toSuggestion)) }) { Text("Use all ${bulk.size}") }
                         }
                     }
                     if (scan.running && scan.total > 0) LinearProgressIndicator(progress = { scan.done.toFloat() / scan.total }, modifier = Modifier.fillMaxWidth())
-                    scan.message?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    scan.message?.let { message ->
+                        val after = when {
+                            scan.running -> ""
+                            pending.isEmpty() -> " · every app already has a choice"
+                            else -> " · ${pending.size} waiting below"
+                        }
+                        Text(message + after, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    if (needsTap.isNotEmpty() && !scan.running) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                "🗑️ ${needsTap.size} ${if (needsTap.size == 1) "app is" else "apps are"} suggested for Junk. Tap Use it on each one, so a wrong guess can't hide an app.",
+                                Modifier.weight(1f), style = MaterialTheme.typography.bodySmall,
+                            )
+                            TextButton(onClick = { filter = AppFilter.PENDING }) { Text("Review") }
+                        }
+                    }
                 }
             }
         }

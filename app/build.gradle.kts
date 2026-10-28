@@ -78,6 +78,13 @@ android {
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.getByName(if (hasReleaseKey) "release" else "debug")
         }
+        // Your own phone: the release app (same id and signature, so it installs over a downloaded copy and keeps
+        // its data) with the .env model preloaded. Never share app-personal.apk: it contains your key.
+        create("personal") {
+            initWith(getByName("release"))
+            buildConfigField("String", "ENV_API_KEY", quoted(keyEnv.second))
+            matchingFallbacks += "release"
+        }
         // Made-up notifications for README screenshots; installs beside the real app and never reads the drawer.
         create("demo") {
             initWith(getByName("debug"))

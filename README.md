@@ -156,7 +156,16 @@ The status card on Home always shows the one next step:
 Without a model NotiSift uses built-in rules on the phone, which already handle messages, codes, money, deliveries,
 promos and app types. A model is better at the in-between cases ("is this Amazon notification a delivery or a deal?").
 
-In the app: **Settings → Advanced**
+**Fastest: Connect OpenRouter.** Home offers *Make sorting smarter*; tap **Add a key → Connect OpenRouter**, sign in on
+openrouter.ai and approve. NotiSift gets its own key back automatically (OpenRouter's PKCE sign-in, caught by a
+one-time listener on `localhost` on the phone), saves it encrypted and tests it. One OpenRouter account reaches Claude,
+GPT, Gemini, Perplexity Sonar and many more.
+
+**Any other provider:** the same screen has buttons to each provider's key page (Gemini and Groq have free tiers).
+Copy the key, come back, and NotiSift offers *Use the key you copied*. Only OpenRouter offers sign-in for apps;
+the others need a key created on their website.
+
+Everything is in **Settings → Advanced**:
 
 | Field | What to put there |
 |---|---|
@@ -181,10 +190,12 @@ with an Android Keystore key.
 | Ollama / LM Studio | `:11434` / `:1234` | Local and private. Plain HTTP is allowed only for LAN/localhost hosts |
 | Anything else | custom base URL | Any OpenAI-compatible `/chat/completions` server |
 
-**Developers:** copy `.env.example` to `.env` (git-ignored) and fill in one key to pre-fill your own debug builds.
+**Developers:** copy `.env.example` to `.env` (git-ignored) and fill in one key to pre-fill your own builds:
+`assembleDebug`, or `assemblePersonal` (the signed release app with your key, which installs over a downloaded copy
+and keeps its data).
 
-> The `.env` key is compiled into **debug** builds only. Release APKs never contain it unless you set
-> `SIFT_EMBED_KEY_IN_RELEASE=true`; never share an APK built that way.
+> The `.env` key is compiled into **debug** and **personal** builds only. `app-release.apk`, and every APK on the
+> Releases page, never contains it. Never share a personal or debug APK.
 
 ### 4. Tune it
 
@@ -199,6 +210,7 @@ with an Android Keystore key.
 | Quiet a busy group chat | Open one of its messages on **Home** → ⭐ Always on top / @ Only when mentioned / 🔕 Mute |
 | Get @mentions through from muted groups | **Settings → Your choices** → *Names people @mention you by* |
 | Pause for a while | Quick Settings tile, or **Preview only** on the status card |
+| Move to a new phone | **Settings → Move to a new phone → Export**, then **Import** the file on the new phone. Brings app choices, corrections, keyword and chat rules, groups and settings; never your API key or notification history |
 
 Your choices always win over the AI. Protected groups (people, codes, money, calls) can be pinned on top but never hidden.
 
@@ -350,6 +362,7 @@ scripts/            e2e-deeplink.sh
 ```bash
 ./gradlew :app:testDebugUnitTest :app:lintDebug   # unit tests + lint
 ./gradlew :app:assembleDebug                      # your own debug build (.env key included)
+./gradlew :app:assemblePersonal                   # signed release app + your .env key, for your own phone
 ./gradlew :app:assembleDemo                       # demo build with made-up data, for screenshots
 ```
 

@@ -148,6 +148,9 @@ interface SiftDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun cache(decision: CachedDecision)
     @Query("DELETE FROM cache WHERE pinned = 0 AND createdAt < :before") suspend fun pruneCache(before: Long)
     @Query("DELETE FROM cache WHERE pinned = 0") suspend fun clearLearned()
+    /** Your corrections: what NotiSift learned from you, kept forever and carried over in a backup. */
+    @Query("SELECT * FROM cache WHERE pinned = 1") suspend fun corrections(): List<CachedDecision>
+    @Upsert suspend fun upsertCache(decisions: List<CachedDecision>)
     @Query("DELETE FROM cache WHERE templateKey = :key") suspend fun uncache(key: String)
     @Query("UPDATE entries SET action = :action, source = :source WHERE id = :id") suspend fun restoreDecision(id: Long, action: String, source: String)
     @Query("DELETE FROM entries") suspend fun clearHistory()

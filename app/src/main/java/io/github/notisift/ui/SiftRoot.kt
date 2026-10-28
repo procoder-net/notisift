@@ -128,7 +128,7 @@ fun SiftRoot(requestedTier: String?, onTierShown: () -> Unit, vm: MainViewModel 
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
                         val content = Modifier.fillMaxSize().let { if (wide && tab != Tab.HOME && tab != Tab.APPS) it.widthIn(max = 840.dp) else it }
                         when (tab) {
-                            Tab.HOME -> HomeScreen(vm, content, inboxTier, { inboxTier = it; inboxCategory = null }, inboxCategory, onCategory = { inboxCategory = it })
+                            Tab.HOME -> HomeScreen(vm, content, inboxTier, { inboxTier = it; inboxCategory = null }, inboxCategory, onCategory = { inboxCategory = it }, onAddAiKey = { vm.requestAiSetup(); tab = Tab.SETTINGS })
                             Tab.APPS -> AppsScreen(vm, content)
                             Tab.SETTINGS -> SettingsScreen(vm, content)
                         }

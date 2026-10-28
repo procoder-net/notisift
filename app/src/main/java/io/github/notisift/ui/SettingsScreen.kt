@@ -1,5 +1,7 @@
 package io.github.notisift.ui
 
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -58,7 +60,7 @@ import io.github.notisift.llm.ProviderKind
 fun SettingsScreen(vm: MainViewModel, modifier: Modifier) {
     val saved by vm.settings.collectAsState()
     val s = saved ?: return
-    var advanced by remember { mutableStateOf(false) }
+    var advanced by remember { mutableStateOf(vm.takeAiSetupRequest()) }
     val suggestions by vm.ruleSuggestions.collectAsState()
     val groups by vm.groups.collectAsState()
     val policies by vm.policies.collectAsState()
@@ -117,6 +119,8 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier) {
                 }
             }
         }
+
+        Section("Move to a new phone") { BackupChoices(vm) }
 
         Section("Advanced") {
             TextButton(onClick = { advanced = !advanced }) { Text(if (advanced) "Hide advanced settings" else "Show advanced settings") }
@@ -238,6 +242,8 @@ private fun AdvancedSettings(vm: MainViewModel, s: AppSettings) {
         val kind = ProviderKind.fromId(id)
         draft = draft.copy(provider = id, baseUrl = if (kind != null) "" else draft.baseUrl, model = if (kind != null) "" else draft.model)
     }
+    // No key yet: say how to get one right where it goes.
+    if (draft.apiKey.isBlank() && resolved.kind.needsKey) AiKeySteps(vm) { key -> draft = draft.copy(apiKey = key, provider = "", baseUrl = "", model = "") }
     OutlinedTextField(
         draft.apiKey, { draft = draft.copy(apiKey = it.trim()) }, Modifier.fillMaxWidth(), label = { Text("API key") }, singleLine = true,
         visualTransformation = if (showKey) VisualTransformation.None else PasswordVisualTransformation(),
@@ -329,5 +335,21 @@ private fun ModelField(value: String, default: String, options: List<String>, on
                 options.take(60).forEach { m -> DropdownMenuItem(text = { Text(m) }, onClick = { open = false; onChange(m) }) }
             }
         }
+    }
+}
+
+/** Export and import of what NotiSift learned, through Android's file picker (Drive, Downloads, USB…). */
+@Composable
+private fun BackupChoices(vm: MainViewModel) {
+    val save = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri -> uri?.let(vm::exportBackup) }
+    val open = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> uri?.let(vm::importBackup) }
+    Text(
+        "Save your app choices, corrections, keyword and chat rules, groups and settings to a file, then import it on your new phone. " +
+            "Your API key and notification history are never included.",
+        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Button(onClick = { save.launch("notisift-backup-${java.time.LocalDate.now()}.json") }) { Text("Export") }
+        OutlinedButton(onClick = { open.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }) { Text("Import") }
     }
 }
