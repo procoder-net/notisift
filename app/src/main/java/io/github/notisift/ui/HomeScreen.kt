@@ -16,10 +16,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Close
+
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Search
@@ -28,7 +30,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
@@ -45,6 +46,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
@@ -64,7 +67,9 @@ private const val CONFIRM_CLEAR_OVER = 50
  * lives in exactly one place, so important ones are not listed here again. Cleared ones wait in Cleared.
  */
 @Composable
-fun HomeScreen(vm: MainViewModel, modifier: Modifier, tier: String, onTier: (String) -> Unit, selectedCategory: String?, onCategory: (String?) -> Unit, onAddAiKey: () -> Unit) {
+fun HomeScreen(vm: MainViewModel, modifier: Modifier, tier: String, onTier: (String) -> Unit, selectedCategory: String?, onCategory: (String?) -> Unit, onAddAiKey: () -> Unit,
+    searchOpen: Boolean, onSearchOpen: (Boolean) -> Unit, scrollToTop: Int,
+) {
     LaunchedEffect(tier) { vm.showHome(tier) }
     val view by vm.home.collectAsState()
     val entries by vm.homeEntries.collectAsState()
@@ -78,8 +83,12 @@ fun HomeScreen(vm: MainViewModel, modifier: Modifier, tier: String, onTier: (Str
     val byDay = settings?.groupByDay == true
     val busy by vm.busyChats.collectAsState()
     var busyDismissed by rememberSaveable { mutableStateOf(false) }
-    var searchOpen by rememberSaveable { mutableStateOf(false) }
     var confirmClear by remember { mutableStateOf<Tier?>(null) }
+    var confirmRestore by remember { mutableStateOf<List<Entry>?>(null) }
+    val listState = rememberLazyListState()
+    LaunchedEffect(scrollToTop) { if (scrollToTop > 0) listState.animateScrollToItem(0) }
+    // The search field sits at the top of the list, so bring it into view when search opens.
+    LaunchedEffect(searchOpen) { if (searchOpen) listState.scrollToItem(0) }
     val policies by vm.policies.collectAsState()
     // Offered once the apps are set up, never during the first-run steps, and gone for good after "Not now".
     val offerAi = settings?.let { !it.aiTipDismissed && !it.stopped && it.aiEnabled } == true && policies.isNotEmpty() && vm.cloudProvider() == null
@@ -87,7 +96,8 @@ fun HomeScreen(vm: MainViewModel, modifier: Modifier, tier: String, onTier: (Str
     val sections = remember(visible, view, byDay) { homeSections(visible, view, byDay) }
     val wide = isWide()
     val tierTotal = shown?.let { counts[it] } ?: 0
-    val endSearch = { vm.searchHome(""); searchOpen = false }
+    val endSearch = { vm.searchHome(""); onSearchOpen(false) }
+    val onRestore: (List<Entry>) -> Unit = { list -> if (list.size > CONFIRM_CLEAR_OVER) confirmRestore = list else vm.restore(list) }
 
     val header: LazyListScope.() -> Unit = {
         item(key = "status") { Box(Modifier.tourTarget("status")) { StatusCard(vm) } }
@@ -98,16 +108,14 @@ fun HomeScreen(vm: MainViewModel, modifier: Modifier, tier: String, onTier: (Str
                     FilterChip(selected = !view.searching && shown == t, onClick = { endSearch(); onTier(t.id) }, label = { Text("${t.emoji} ${t.label} ${counts[t] ?: 0}") })
                 }
                 item { FilterChip(selected = view.cleared, onClick = { endSearch(); onTier(HomeView.CLEARED) }, label = { Text("↩️ Cleared $clearedCount") }) }
-                item {
-                    IconButton(onClick = { if (searchOpen) endSearch() else searchOpen = true }) {
-                        Icon(if (searchOpen) Icons.Outlined.Close else Icons.Outlined.Search, if (searchOpen) "Close search" else "Search notifications")
-                    }
-                }
             }
         }
         if (searchOpen) item(key = "search") {
+            // Opening search means typing next, so the field takes focus and the keyboard comes up.
+            val focus = remember { FocusRequester() }
+            LaunchedEffect(Unit) { focus.requestFocus() }
             OutlinedTextField(
-                view.search, vm::searchHome, Modifier.fillMaxWidth(), singleLine = true,
+                view.search, vm::searchHome, Modifier.fillMaxWidth().focusRequester(focus), singleLine = true,
                 label = { Text("Search by app, sender or text") }, leadingIcon = { Icon(Icons.Outlined.Search, null) },
             )
         }
@@ -154,16 +162,26 @@ fun HomeScreen(vm: MainViewModel, modifier: Modifier, tier: String, onTier: (Str
         )
     }
 
+    confirmRestore?.let { list ->
+        AlertDialog(
+            onDismissRequest = { confirmRestore = null },
+            title = { Text("Restore ${list.size} notifications?") },
+            text = { Text("They go back to Home, and important ones back on top of your drawer.") },
+            confirmButton = { TextButton(onClick = { vm.restore(list); confirmRestore = null }) { Text("Restore") } },
+            dismissButton = { TextButton(onClick = { confirmRestore = null }) { Text("Cancel") } },
+        )
+    }
+
     if (wide && groups.isNotEmpty()) {
         Row(modifier) {
             LazyColumn(Modifier.width(280.dp).fillMaxHeight()) {
                 item { CategoryRow(null, entries.size, selected == null) { onCategory(null) } }
                 items(groups.keys.toList()) { c -> CategoryRow(c, groups.getValue(c).size, selected == c) { onCategory(c.id) } }
             }
-            EntryList(vm, sections, view.cleared, Modifier.weight(1f), header, footer)
+            EntryList(vm, sections, view.cleared, Modifier.weight(1f), listState, onRestore, header, footer)
         }
     } else {
-        EntryList(vm, sections, view.cleared, modifier, header, footer)
+        EntryList(vm, sections, view.cleared, modifier, listState, onRestore, header, footer)
     }
 }
 
@@ -183,8 +201,13 @@ private fun homeSections(visible: List<Entry>, view: HomeView, byDay: Boolean): 
     return when {
         view.searching -> visible.groupBy { Tier.of(it.action) }.toSortedMap(compareBy { it.ordinal })
             .map { (t, list) -> Section("s-${t.id}", "${t.emoji}  ${t.label}", list, byGroup = false) }
-        view.cleared -> byDay(visible, { it.dismissedAt.takeIf { at -> at > 0 } ?: it.postedAt }, now)
-            .map { Section("c-${it.day}", "Cleared ${it.title.lowercase().takeIf { t -> t == "today" || t == "yesterday" } ?: it.title}", it.items, byGroup = false) }
+        view.cleared -> {
+            // Cleared before 0.1.2 recorded when: those have no clearing day, so they share one last section.
+            val (dated, undated) = visible.partition { it.dismissedAt > 0 }
+            byDay(dated, Entry::dismissedAt, now)
+                .map { Section("c-${it.day}", "Cleared ${it.title.lowercase().takeIf { t -> t == "today" || t == "yesterday" } ?: it.title}", it.items, byGroup = false) } +
+                listOfNotNull(undated.takeIf { it.isNotEmpty() }?.let { Section("c-earlier", "Cleared earlier", it, byGroup = false) })
+        }
         byDay -> byDay(visible, Entry::postedAt, now).map { Section("d-${it.day}", it.title, it.items, byGroup = true) }
         else -> visible.groupBy { Category.fromId(it.category) }.toSortedMap(compareBy { it.ordinal })
             .map { (c, list) -> Section("h-${c.id}", "${c.emoji()}  ${c.label}", list, byGroup = false) }
@@ -202,11 +225,14 @@ private fun CategoryRow(category: Category?, count: Int, selected: Boolean, onCl
 }
 
 @Composable
-private fun EntryList(vm: MainViewModel, sections: List<Section>, cleared: Boolean, modifier: Modifier, header: LazyListScope.() -> Unit, footer: LazyListScope.() -> Unit) {
+private fun EntryList(
+    vm: MainViewModel, sections: List<Section>, cleared: Boolean, modifier: Modifier, listState: LazyListState,
+    onRestore: (List<Entry>) -> Unit, header: LazyListScope.() -> Unit, footer: LazyListScope.() -> Unit,
+) {
     // Tap a header to fold it away, like a stack in the drawer.
     var collapsed by remember { mutableStateOf(emptySet<String>()) }
     var opened by remember { mutableStateOf(emptySet<String>()) }
-    LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    LazyColumn(modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         header()
         if (sections.isNotEmpty()) item(key = "hint") {
             Text(
@@ -219,7 +245,7 @@ private fun EntryList(vm: MainViewModel, sections: List<Section>, cleared: Boole
             val folded = section.key in collapsed
             item(key = section.key) {
                 SectionHeader("${section.title} · ${list.size}", folded, onToggle = { collapsed = if (folded) collapsed - section.key else collapsed + section.key }) {
-                    if (cleared) TextButton(onClick = { vm.restore(list) }) { Text("Restore") }
+                    if (cleared) TextButton(onClick = { onRestore(list) }) { Text("Restore") }
                     else TextButton(onClick = { vm.clearTier(list) }) { Text("Clear") }
                 }
             }
