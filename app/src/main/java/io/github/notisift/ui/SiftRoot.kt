@@ -65,6 +65,8 @@ fun SiftRoot(requestedTier: String?, onTierShown: () -> Unit, vm: MainViewModel 
             tab = Tab.HOME
             val (tierId, categoryId) = requestedTier.split('/').let { it[0] to it.getOrNull(1) }
             Tier.fromId(tierId)?.let { inboxTier = it.id }
+            // Tapped from the drawer: show that tier, not an old search.
+            vm.searchHome("")
             inboxCategory = categoryId
             onTierShown()
         }
@@ -76,7 +78,7 @@ fun SiftRoot(requestedTier: String?, onTierShown: () -> Unit, vm: MainViewModel 
     LaunchedEffect(undo) {
         undo?.let { notice ->
             // A newer notice restarts this effect and replaces the snackbar; consume only once this one is over.
-            val result = snackbar.showSnackbar(notice.message, actionLabel = "Undo", duration = SnackbarDuration.Short)
+            val result = snackbar.showSnackbar(notice.message, actionLabel = "Undo", duration = SnackbarDuration.Long)
             if (result == SnackbarResult.ActionPerformed) vm.performUndo(notice)
             vm.consumeUndo()
         }

@@ -25,8 +25,9 @@ NotiSift decides **per notification**: what matters stays on top, the noise wait
 > - **Your rules always win:** codes, chats, calls and alarms never leave the phone, your choices beat the model,
 >   and if the model is slow or unsure the notification simply stays in the drawer.
 > - **No AI? Still works.** Built-in on-phone rules make the same decisions offline. The model makes them sharper.
-> - **Nothing is lost:** Later and Junk stay in the app (14 days by default). New installs start in **Preview**,
->   where nothing moves until you say so.
+> - **Nothing is lost:** Later and Junk stay in the app (14 days by default), and anything you clear, here or in
+>   the drawer, waits in **Cleared** so you can restore it. New installs start in **Preview**, where nothing moves
+>   until you say so.
 
 <p align="center">
   <a href="https://github.com/procoder-net/notisift/releases/latest"><b>⬇️ Download the latest APK</b></a>
@@ -84,7 +85,9 @@ so the Later pile stays readable instead of being one long list.
 ### How it helps
 
 - **A short drawer.** Only the few things that need you now sit on top; everything else is one silent row per group.
-- **Nothing is lost.** Junk and Later stay in the app (14 days by default). Swipe any one back on top.
+- **Nothing is lost.** Junk and Later stay in the app (14 days by default). Swipe any one back on top. Cleared one
+  by mistake, even a whole day's stack in the drawer? **Home → ↩️ Cleared** puts it back.
+- **Find it again.** 🔍 on Home searches every notification by app, sender or text.
 - **Chats, not just apps.** A 1:1 chat and a 300-member community group aren't equally urgent. Set any chat to
   *Only when mentioned* or *Mute*. When groups flood the top, Home offers to quiet them in one tap (it never does
   it on its own).
@@ -229,11 +232,13 @@ and keeps its data).
 | Hide a kind of notification everywhere (e.g. all promos) | **Settings → Groups** → 🗑️ Junk on *Promotions & ads* |
 | Catch a phrase ("flash sale", "your OTP") | **Settings → Your choices** → *When a notification says…* |
 | Fix one mistake | **Home** → swipe right (on top) or left (done); *Undo* in the snackbar |
+| Get back something I cleared | **Home → ↩️ Cleared** → swipe right or *Restore* (a whole day at once from its header) |
+| Find a notification I saw earlier | **Home → 🔍** and type the app, sender or a word from it |
 | Keep history shorter or longer | **Settings** → history retention, or *Delete notification history* |
 | See everything by date instead of by group | **Home → By day** (the drawer switches too) |
 | Quiet a busy group chat | Open one of its messages on **Home** → ⭐ Always on top / @ Only when mentioned / 🔕 Mute |
 | Get @mentions through from muted groups | **Settings → Your choices** → *Names people @mention you by* |
-| Pause for a while | Quick Settings tile, or **Preview only** on the status card |
+| Pause for a while | Quick Settings tile, or **⋯ → Preview only** on the status card |
 | Move to a new phone | **Settings → Move to a new phone → Export**, then **Import** the file on the new phone. Brings app choices, corrections, keyword and chat rules, groups and settings; never your API key or notification history |
 
 Your choices always win over the AI. Protected groups (people, codes, money, calls) can be pinned on top but never hidden.
