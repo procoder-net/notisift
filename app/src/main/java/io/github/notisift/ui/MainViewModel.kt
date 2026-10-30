@@ -34,7 +34,9 @@ import io.github.notisift.service.SiftListener
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -68,6 +70,29 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val settings: StateFlow<AppSettings?> = app.settings
     val listenerConnected: StateFlow<Boolean> = SiftListener.connected
     val entries: StateFlow<List<Entry>> = dao.entries().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    private val _home = MutableStateFlow(HomeView())
+    /** Which tier, search or Cleared list Home shows, and how much of it is loaded. */
+    val home = _home.asStateFlow()
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val homeEntries: StateFlow<List<Entry>> = _home.flatMapLatest { v ->
+        when {
+            v.searching -> dao.search(HomeView.likePattern(v.search), v.limit)
+            v.cleared -> dao.cleared(v.limit)
+            else -> dao.entriesIn(HomeView.actionsOf(v.tier ?: Tier.LATER), v.limit)
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /** Everything still waiting, per tier: counted in the database, so it's right however much Home has loaded. */
+    val openCounts: StateFlow<Map<Tier, Int>> = dao.openCounts().map { rows -> rows.groupBy({ Tier.of(it.action) }, { it.total }).mapValues { it.value.sum() } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+    val clearedCount: StateFlow<Int> = dao.clearedCount().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+
+    fun showHome(view: String) = _home.update { if (it.view == view) it else it.copy(view = view, limit = HomeView.PAGE) }
+    fun searchHome(query: String) = _home.update { it.copy(search = query.take(HomeView.MAX_SEARCH), limit = HomeView.PAGE) }
+    fun showMore() = _home.update { it.copy(limit = it.limit + HomeView.PAGE) }
+
     val policies: StateFlow<List<Policy>> = dao.policies().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     /** Apps that posted in the last 2 weeks: the Apps tab's default list. */
     val activeApps: StateFlow<Set<String>> = dao.activePackages(System.currentTimeMillis() - 14 * SiftApp.DAY_MS).map { it.toSet() }
@@ -438,11 +463,36 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (app.digest.openOriginal(entry)) clear(listOf(entry)) else _toast.value = "Can't open ${entry.appLabel}"
     }
 
-    /** Clear / Clear all: exactly the items on screen, with Undo. */
+    /** Clear on a group or day: exactly the items under that header, with Undo. */
     fun clearTier(entries: List<Entry>) = viewModelScope.launch {
         if (entries.isEmpty()) return@launch
         val undo = clear(entries)
-        _undo.value = UndoNotice("Cleared ${entries.size}", undo)
+        _undo.value = UndoNotice(clearedMessage(entries.size), undo)
+    }
+
+    /** Clear all: the whole tier, including what Home hasn't loaded yet, with Undo. */
+    fun clearAll(tier: Tier) = viewModelScope.launch {
+        val all = dao.allIn(HomeView.actionsOf(tier))
+        if (all.isEmpty()) return@launch
+        val undo = clear(all)
+        _undo.value = UndoNotice(clearedMessage(all.size), undo)
+    }
+
+    private fun clearedMessage(count: Int) = "Cleared $count · find ${if (count == 1) "it" else "them"} in Cleared"
+
+    /** Puts cleared notifications back: on Home, and in the drawer for ones NotiSift was showing there. */
+    fun restore(entries: List<Entry>) = viewModelScope.launch {
+        if (entries.isEmpty()) return@launch
+        val ids = entries.map { it.id }
+        val shown = entries.filter { Tier.of(it.action) == Tier.IMPORTANT && it.applied }.distinctBy { it.key }
+        dao.setDismissed(ids, false)
+        shown.forEach { app.digest.important.restore(it) }
+        app.digest.requestRefresh()
+        _undo.value = UndoNotice("Restored ${entries.size}") {
+            dao.setDismissed(ids, true)
+            shown.forEach { app.digest.important.remove(it.key) }
+            app.digest.requestRefresh()
+        }
     }
 
     /** "This mattered": keep this kind of notification from now on and put it back in the shade. Undo forgets the rule too. */

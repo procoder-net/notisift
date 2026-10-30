@@ -60,4 +60,9 @@ class BackupTest {
         assertEquals(1, f.settings.retentionDays)
         assertEquals(500, f.settings.myNames.length)
     }
+
+    @Test fun `long history in a backup is capped at what Settings allows`() {
+        val f = Backup.decode("""{"format":"notisift-backup","version":1,"settings":{"retentionDays":200}}""")
+        assertEquals(AppSettings.RETENTION_DAYS.last, f.settings.retentionDays)
+    }
 }

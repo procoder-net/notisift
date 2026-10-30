@@ -1,6 +1,7 @@
 package io.github.notisift.data
 
 import android.content.Context
+import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Database
 import androidx.room.Entity
@@ -12,6 +13,8 @@ import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.Upsert
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
 
 @Entity(tableName = "entries", indices = [Index("postedAt"), Index("packageName"), Index("action")])
@@ -33,6 +36,8 @@ data class Entry(
     /** False in observe mode: the decision was recorded but the notification was left alone. */
     val applied: Boolean,
     val dismissed: Boolean = false,
+    /** When it was cleared (swiped, Clear, opened), for "Recently cleared". 0 while it isn't. */
+    @ColumnInfo(defaultValue = "0") val dismissedAt: Long = 0,
 )
 
 @Entity(tableName = "policies")
@@ -71,8 +76,30 @@ data class ChannelCount(val packageName: String, val channelId: String, val tota
 interface SiftDao {
     @Insert suspend fun insert(entry: Entry): Long
 
+    /** The newest open notifications, for busy-chat detection and the demo; Home pages with [entriesIn]. */
     @Query("SELECT * FROM entries WHERE dismissed = 0 ORDER BY postedAt DESC LIMIT 1000")
     fun entries(): Flow<List<Entry>>
+
+    /** One Home tier, newest first; Home asks for more as you scroll. */
+    @Query("SELECT * FROM entries WHERE dismissed = 0 AND action IN (:actions) ORDER BY postedAt DESC LIMIT :limit")
+    fun entriesIn(actions: List<String>, limit: Int): Flow<List<Entry>>
+
+    @Query("SELECT * FROM entries WHERE dismissed = 0 AND action IN (:actions)")
+    suspend fun allIn(actions: List<String>): List<Entry>
+
+    /** Everything cleared, swiped or opened (from the app or the drawer), most recently cleared first. */
+    @Query("SELECT * FROM entries WHERE dismissed = 1 ORDER BY dismissedAt DESC, postedAt DESC LIMIT :limit")
+    fun cleared(limit: Int): Flow<List<Entry>>
+
+    /** [pattern] is a LIKE pattern that escapes with a backslash (see HomeView.likePattern). */
+    @Query("SELECT * FROM entries WHERE dismissed = 0 AND (title LIKE :pattern ESCAPE '\\' OR text LIKE :pattern ESCAPE '\\' OR appLabel LIKE :pattern ESCAPE '\\') ORDER BY postedAt DESC LIMIT :limit")
+    fun search(pattern: String, limit: Int): Flow<List<Entry>>
+
+    @Query("SELECT action, COUNT(*) AS total FROM entries WHERE dismissed = 0 GROUP BY action")
+    fun openCounts(): Flow<List<ActionCount>>
+
+    @Query("SELECT COUNT(*) FROM entries WHERE dismissed = 1")
+    fun clearedCount(): Flow<Int>
 
     @Query("SELECT * FROM entries WHERE id = :id") suspend fun entry(id: Long): Entry?
     @Query("SELECT * FROM entries WHERE action != 'keep' AND applied = 1 AND dismissed = 0 AND postedAt >= :since ORDER BY postedAt DESC")
@@ -82,7 +109,7 @@ interface SiftDao {
     @Query("SELECT * FROM entries WHERE action = 'keep' AND applied = 1 AND dismissed = 0 AND postedAt >= :since ORDER BY postedAt DESC")
     suspend fun shownImportantSince(since: Long): List<Entry>
 
-    @Query("UPDATE entries SET dismissed = :dismissed WHERE id IN (:ids)")
+    @Query("UPDATE entries SET dismissed = :dismissed, dismissedAt = CASE WHEN :dismissed THEN CAST(strftime('%s','now') AS INTEGER) * 1000 ELSE 0 END WHERE id IN (:ids)")
     suspend fun setDismissed(ids: List<Long>, dismissed: Boolean)
 
     @Query("SELECT id FROM entries WHERE `key` = :key AND action = 'keep' AND dismissed = 0")
@@ -95,8 +122,8 @@ interface SiftDao {
     @Query("SELECT COUNT(*) FROM entries WHERE templateKey = :template AND action = 'keep' AND postedAt >= :since")
     suspend fun countLike(template: String, since: Long): Int
 
-    @Query("UPDATE entries SET dismissed = 1 WHERE `key` = :key AND action = 'keep'") suspend fun dismissImportant(key: String)
-    @Query("UPDATE entries SET dismissed = 1 WHERE action != 'keep' AND action != 'silence' AND action != 'block'") suspend fun dismissAllLater()
+    @Query("UPDATE entries SET dismissed = 1, dismissedAt = CAST(strftime('%s','now') AS INTEGER) * 1000 WHERE `key` = :key AND action = 'keep' AND dismissed = 0") suspend fun dismissImportant(key: String)
+    @Query("UPDATE entries SET dismissed = 1, dismissedAt = CAST(strftime('%s','now') AS INTEGER) * 1000 WHERE dismissed = 0 AND action != 'keep' AND action != 'silence' AND action != 'block'") suspend fun dismissAllLater()
 
     /** AI-made decisions per app, including handled ones; feeds "make it a rule" suggestions. */
     @Query("SELECT packageName, appLabel, action, COUNT(*) AS total FROM entries WHERE postedAt >= :since AND source IN ('MODEL', 'INBOX', 'CACHE') GROUP BY packageName, action")
@@ -109,9 +136,9 @@ interface SiftDao {
 
     @Query("SELECT action, COUNT(*) AS total FROM entries WHERE postedAt >= :since GROUP BY action")
     fun countByAction(since: Long): Flow<List<ActionCount>>
-    @Query("UPDATE entries SET dismissed = 1 WHERE id = :id") suspend fun dismiss(id: Long)
+    @Query("UPDATE entries SET dismissed = 1, dismissedAt = CAST(strftime('%s','now') AS INTEGER) * 1000 WHERE id = :id") suspend fun dismiss(id: Long)
     @Query("UPDATE entries SET applied = :applied WHERE id = :id") suspend fun setApplied(id: Long, applied: Boolean)
-    @Query("UPDATE entries SET dismissed = 1 WHERE category = :category AND action IN (:actions)") suspend fun dismissCategory(category: String, actions: List<String>)
+    @Query("UPDATE entries SET dismissed = 1, dismissedAt = CAST(strftime('%s','now') AS INTEGER) * 1000 WHERE dismissed = 0 AND category = :category AND action IN (:actions)") suspend fun dismissCategory(category: String, actions: List<String>)
     @Query("UPDATE entries SET action = :action, source = 'CORRECTION' WHERE id = :id") suspend fun correct(id: Long, action: String)
     @Query("DELETE FROM entries WHERE postedAt < :before") suspend fun prune(before: Long)
     /** Drops rows another NotiSift build posted (the demo's sample rows) that older versions sorted by mistake. */
@@ -158,12 +185,19 @@ interface SiftDao {
     @Query("UPDATE entries SET action = :action, source = :source WHERE id IN (:ids)") suspend fun setDecision(ids: List<Long>, action: String, source: String)
 }
 
-@Database(entities = [Entry::class, Policy::class, CachedDecision::class], version = 1, exportSchema = true)
+@Database(entities = [Entry::class, Policy::class, CachedDecision::class], version = 2, exportSchema = true)
 abstract class SiftDatabase : RoomDatabase() {
     abstract fun dao(): SiftDao
 
     companion object {
         fun create(context: Context): SiftDatabase =
-            Room.databaseBuilder(context, SiftDatabase::class.java, "notisift.db").build()
+            Room.databaseBuilder(context, SiftDatabase::class.java, "notisift.db").addMigrations(MIGRATION_1_2).build()
+
+        /** 0.1.2: remember when each notification was cleared, so cleared ones can be found and restored. */
+        val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE entries ADD COLUMN dismissedAt INTEGER NOT NULL DEFAULT 0")
+            }
+        }
     }
 }

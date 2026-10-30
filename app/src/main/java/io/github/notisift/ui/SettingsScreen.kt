@@ -262,7 +262,7 @@ private fun AdvancedSettings(vm: MainViewModel, s: AppSettings) {
             "${((draft.threshold - DecisionEngine.BUNDLE_MARGIN) * 100).toInt()}%+ sure it matters.",
         style = MaterialTheme.typography.bodyMedium,
     )
-    Slider(draft.threshold.toFloat(), { draft = draft.copy(threshold = it.toDouble()) }, valueRange = 0.5f..0.95f, steps = 8)
+    Slider(draft.threshold.toFloat(), { draft = draft.copy(threshold = it.toDouble()) }, valueRange = AppSettings.THRESHOLD_RANGE.start.toFloat()..AppSettings.THRESHOLD_RANGE.endInclusive.toFloat(), steps = 8)
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
         Button(onClick = {
             vm.updateSettings { it.copy(rules = draft.rules, threshold = draft.threshold, aiEnabled = draft.aiEnabled) }
@@ -280,7 +280,7 @@ private fun AdvancedSettings(vm: MainViewModel, s: AppSettings) {
         "Everything NotiSift moved stays in the app this long, then is deleted. Rows in the drawer go after a day.",
         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
-    Slider(s.retentionDays.toFloat(), { d -> vm.updateSettings { it.copy(retentionDays = d.toInt()) } }, valueRange = 1f..60f)
+    Slider(s.retentionDays.toFloat(), { d -> vm.updateSettings { it.copy(retentionDays = d.toInt()) } }, valueRange = AppSettings.RETENTION_DAYS.first.toFloat()..AppSettings.RETENTION_DAYS.last.toFloat())
     OutlinedButton(onClick = { vm.forgetLearned() }) { Text("Forget what NotiSift learned") }
     OutlinedButton(onClick = { vm.deleteHistory() }) { Text("Delete notification history") }
 }

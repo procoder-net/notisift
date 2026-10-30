@@ -18,13 +18,17 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.PauseCircle
 import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -130,8 +134,8 @@ fun StatusCard(vm: MainViewModel) {
             MaterialTheme.colorScheme.primaryContainer,
         ) {
             FilledTonalButton(onClick = { vm.cleanNow() }) { Text("Clean again") }
-            TextButton(onClick = { vm.setActive(false) }) { Text("Preview only") }
-            TextButton(onClick = { vm.setStopped(true) }) { Text("Turn off") }
+            // One everyday action; pausing is rarer, so it waits behind ⋯ (the Quick Settings tile does it too).
+            MoreMenu(listOf("Preview only" to { vm.setActive(false) }, "Turn off" to { vm.setStopped(true) }))
         }
     }
 }
@@ -149,5 +153,14 @@ private fun Status(icon: ImageVector, title: String, body: String, color: androi
             // Wraps onto a second line in narrow panes (the Fold's two-pane Home) instead of squeezing buttons.
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) { actions() }
         }
+    }
+}
+
+@Composable
+private fun MoreMenu(items: List<Pair<String, () -> Unit>>) {
+    var open by remember { mutableStateOf(false) }
+    IconButton(onClick = { open = true }) { Icon(Icons.Outlined.MoreVert, "More choices") }
+    DropdownMenu(open, onDismissRequest = { open = false }) {
+        items.forEach { (label, action) -> DropdownMenuItem(text = { Text(label) }, onClick = { open = false; action() }) }
     }
 }

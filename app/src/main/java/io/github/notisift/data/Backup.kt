@@ -84,9 +84,9 @@ object Backup {
         return raw.copy(
             settings = s.copy(
                 provider = s.provider.take(40), baseUrl = s.baseUrl.take(300), model = s.model.take(120),
-                threshold = s.threshold.coerceIn(0.5, 0.95), rules = s.rules.take(4_000), keywordRules = s.keywordRules.take(10_000),
+                threshold = s.threshold.coerceIn(AppSettings.THRESHOLD_RANGE), rules = s.rules.take(4_000), keywordRules = s.keywordRules.take(10_000),
                 chatRules = s.chatRules.take(20_000), myNames = s.myNames.take(500), categoryChoices = s.categoryChoices.take(4_000),
-                retentionDays = s.retentionDays.coerceIn(1, 365),
+                retentionDays = s.retentionDays.coerceIn(AppSettings.RETENTION_DAYS),
             ),
             apps = raw.apps.filter { packageName.matches(it.packageName) && AppMode.fromId(it.mode) != null }
                 .distinctBy { it.packageName }.take(5_000)

@@ -8,7 +8,9 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.outlined.Apps
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Inbox
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -57,6 +59,9 @@ fun SiftRoot(requestedTier: String?, onTierShown: () -> Unit, vm: MainViewModel 
     var tab by rememberSaveable { mutableStateOf(Tab.HOME) }
     var inboxCategory by rememberSaveable { mutableStateOf<String?>(null) }
     var inboxTier by rememberSaveable { mutableStateOf(Tier.LATER.id) }
+    var homeSearch by rememberSaveable { mutableStateOf(false) }
+    // Tapping Home again scrolls it back to the top, as in most apps.
+    var homeTop by remember { mutableStateOf(0) }
     val snackbar = remember { SnackbarHostState() }
     val toast by vm.toast.collectAsState()
 
@@ -65,6 +70,8 @@ fun SiftRoot(requestedTier: String?, onTierShown: () -> Unit, vm: MainViewModel 
             tab = Tab.HOME
             val (tierId, categoryId) = requestedTier.split('/').let { it[0] to it.getOrNull(1) }
             Tier.fromId(tierId)?.let { inboxTier = it.id }
+            // Tapped from the drawer: show that tier, not an old search.
+            vm.searchHome("")
             inboxCategory = categoryId
             onTierShown()
         }
@@ -76,7 +83,7 @@ fun SiftRoot(requestedTier: String?, onTierShown: () -> Unit, vm: MainViewModel 
     LaunchedEffect(undo) {
         undo?.let { notice ->
             // A newer notice restarts this effect and replaces the snackbar; consume only once this one is over.
-            val result = snackbar.showSnackbar(notice.message, actionLabel = "Undo", duration = SnackbarDuration.Short)
+            val result = snackbar.showSnackbar(notice.message, actionLabel = "Undo", duration = SnackbarDuration.Long)
             if (result == SnackbarResult.ActionPerformed) vm.performUndo(notice)
             vm.consumeUndo()
         }
@@ -99,6 +106,9 @@ fun SiftRoot(requestedTier: String?, onTierShown: () -> Unit, vm: MainViewModel 
                     TopAppBar(
                         title = { Text(if (tab == Tab.HOME) "NotiSift" else tab.label) },
                         actions = {
+                            if (tab == Tab.HOME) IconButton(onClick = { if (homeSearch) vm.searchHome(""); homeSearch = !homeSearch }) {
+                                Icon(if (homeSearch) Icons.Outlined.Close else Icons.Outlined.Search, if (homeSearch) "Close search" else "Search notifications")
+                            }
                             IconButton(onClick = { helpOpen = true }, Modifier.tourTarget("help")) {
                                 Icon(Icons.AutoMirrored.Outlined.HelpOutline, contentDescription = "Help")
                             }
@@ -109,7 +119,7 @@ fun SiftRoot(requestedTier: String?, onTierShown: () -> Unit, vm: MainViewModel 
                     if (!wide) NavigationBar {
                         Tab.entries.forEach { t ->
                             NavigationBarItem(
-                                selected = tab == t, onClick = { tab = t }, icon = { Icon(t.icon, null) }, label = { Text(t.label) },
+                                selected = tab == t, onClick = { if (tab == t && t == Tab.HOME) homeTop++; tab = t }, icon = { Icon(t.icon, null) }, label = { Text(t.label) },
                                 modifier = Modifier.tourTarget("nav-${t.name.lowercase()}"),
                             )
                         }
@@ -120,7 +130,7 @@ fun SiftRoot(requestedTier: String?, onTierShown: () -> Unit, vm: MainViewModel 
                     if (wide) NavigationRail {
                         Tab.entries.forEach { t ->
                             NavigationRailItem(
-                                selected = tab == t, onClick = { tab = t }, icon = { Icon(t.icon, null) }, label = { Text(t.label) },
+                                selected = tab == t, onClick = { if (tab == t && t == Tab.HOME) homeTop++; tab = t }, icon = { Icon(t.icon, null) }, label = { Text(t.label) },
                                 modifier = Modifier.tourTarget("nav-${t.name.lowercase()}"),
                             )
                         }
@@ -128,7 +138,7 @@ fun SiftRoot(requestedTier: String?, onTierShown: () -> Unit, vm: MainViewModel 
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
                         val content = Modifier.fillMaxSize().let { if (wide && tab != Tab.HOME && tab != Tab.APPS) it.widthIn(max = 840.dp) else it }
                         when (tab) {
-                            Tab.HOME -> HomeScreen(vm, content, inboxTier, { inboxTier = it; inboxCategory = null }, inboxCategory, onCategory = { inboxCategory = it }, onAddAiKey = { vm.requestAiSetup(); tab = Tab.SETTINGS })
+                            Tab.HOME -> HomeScreen(vm, content, inboxTier, { inboxTier = it; inboxCategory = null }, inboxCategory, onCategory = { inboxCategory = it }, onAddAiKey = { vm.requestAiSetup(); tab = Tab.SETTINGS }, searchOpen = homeSearch, onSearchOpen = { homeSearch = it }, scrollToTop = homeTop)
                             Tab.APPS -> AppsScreen(vm, content)
                             Tab.SETTINGS -> SettingsScreen(vm, content)
                         }

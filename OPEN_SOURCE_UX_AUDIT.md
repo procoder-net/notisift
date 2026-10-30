@@ -223,4 +223,7 @@ Beta success means a new user can understand the benefit, preview decisions, rec
 | P2 First minute | **Partly.** Steps are now 1–3 (access, apps, preview); the posting permission is requested at "Start sorting", not at launch. Sample inbox not done |
 | App icons | **Done** on Home entries and Apps cards |
 | `.env.example` | **Added** |
-| Still open | Sample inbox, search, Recently cleared, vector icon family, launcher icon, accessibility pass, release signing, contributor docs |
+| Release signing, contributor docs | **Done** (v0.1.1, CONTRIBUTING.md, issue forms) |
+| Recently cleared, search, sample inbox (Oct 29) | **Done.** Home has ↩️ Cleared with Restore (also for drawer clears), 🔍 search across tiers, and a made-up example until the first notification arrives. Home pages instead of stopping at 1,000; counts come from the database; Clear all above 50 asks first |
+| Launcher icon, accessibility (Oct 29) | **Done in code, not yet checked with TalkBack.** Adaptive and themed icon; headers announce expanded/collapsed; cards offer Show in drawer / Done / Restore as TalkBack actions; the status card has one main button plus ⋯ |
+| Still open | Translations (issue #1), vector icon family, TalkBack and 200% font check on a device |

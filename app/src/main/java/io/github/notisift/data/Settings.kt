@@ -56,6 +56,12 @@ data class AppSettings(
 ) {
     val modelConfig: ModelConfig get() = ProviderDetector.resolve(provider, apiKey, baseUrl, model, BuildConfig.ENV_API_KEY_NAME)
 
+    companion object {
+        /** One set of limits for the sliders, the stored value and an imported backup. */
+        val THRESHOLD_RANGE = 0.5..0.95
+        val RETENTION_DAYS = 1..90
+    }
+
     override fun toString() = "AppSettings(provider=$provider, model=$model, observe=$observe, apiKey=<redacted>)"
 
     val engine: EngineSettings get() = EngineSettings(
@@ -139,7 +145,7 @@ class SettingsStore(private val context: Context) {
         p[K.aiTipDismissed] = s.aiTipDismissed
         p[K.chatRules] = s.chatRules.take(20_000)
         p[K.myNames] = s.myNames.take(500)
-        p[K.threshold] = s.threshold.coerceIn(0.5, 0.99)
+        p[K.threshold] = s.threshold.coerceIn(AppSettings.THRESHOLD_RANGE)
         p[K.rules] = s.rules.take(4000)
         p[K.keywordRules] = s.keywordRules.take(4000)
         p[K.manageUnlisted] = s.manageUnlistedApps
@@ -147,7 +153,7 @@ class SettingsStore(private val context: Context) {
         p[K.replaceShade] = s.replaceShade
         p[K.categoryChoices] = s.categoryChoices.take(1000)
         p[K.digest] = s.digest
-        p[K.retention] = s.retentionDays.coerceIn(1, 90)
+        p[K.retention] = s.retentionDays.coerceIn(AppSettings.RETENTION_DAYS)
     }
 
     suspend fun update(transform: (AppSettings) -> AppSettings) {

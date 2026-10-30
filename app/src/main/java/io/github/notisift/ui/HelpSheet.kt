@@ -92,6 +92,8 @@ private fun topics(cloudProvider: String?) = listOf(
             "Show in drawer and Junk also teach NotiSift: similar notifications go the same way next time. The Undo button takes back both.",
             "Clear empties a group; Clear all empties the tab. Both can be undone.",
             "In the drawer, swipe any row away as usual. Tap the count on a stack to expand it (Samsung).",
+            "Anything cleared, in the app or the drawer, waits in ↩️ Cleared on Home. Swipe → or tap Restore to put it back.",
+            "🔍 on Home searches every notification by app, sender or text.",
         ),
     ),
     Topic(
