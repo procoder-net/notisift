@@ -76,6 +76,18 @@ class SiftApp : Application() {
         return runCatching { BatchingModel(LlmClient(config)) }.getOrNull()?.also { client = config to it }
     }
 
+    @Volatile private var summaryClient: Pair<ModelConfig, LlmClient>? = null
+
+    /** The model for drawer summaries: only when AI is on, configured, and the user turned summaries on. */
+    fun summaryModel(): LlmClient? {
+        val s = settings.value ?: return null
+        if (!s.aiEnabled || !s.aiSummaries) return null
+        val config = s.modelConfig
+        if (!config.isUsable) return null
+        summaryClient?.takeIf { it.first == config }?.let { return it.second }
+        return runCatching { LlmClient(config) }.getOrNull()?.also { summaryClient = config to it }
+    }
+
     companion object {
         const val DAY_MS = 24L * 60 * 60 * 1000
         private const val PRUNE_EVERY_MS = 6L * 60 * 60 * 1000

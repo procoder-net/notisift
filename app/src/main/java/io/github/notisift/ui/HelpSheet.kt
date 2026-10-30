@@ -110,7 +110,9 @@ private fun topics(cloudProvider: String?) = listOf(
         listOf(
             "⭐ Important · N is NotiSift's stack: newest first, at most 20 rows. Older ones stay in the app.",
             "N waiting in NotiSift holds one row per Later group. Tap a group to open it in the app, or Clear to mark it read.",
-            "Busy group chats? Open a chat message on Home and pick ⭐ Always on top, @ Only when mentioned, or 🔕 Mute. Home also suggests this for groups that flood the top. Add the names people @mention you by in Settings.",
+            "Busy group chats? Open a chat message on Home and pick ⭐ Always on top, @ Only when mentioned, or 🔕 Mute. Home also suggests this for groups you never open. Add the names people @mention you by in Settings.",
+            "Smart group chats: sale posts, forwards and very busy groups wait in Later unless they mention you. 1:1 chats are never quieted. Home's 🤫 card shows what was quieted; Keep them on top undoes it.",
+            "Each chat is one row in the drawer (WhatsApp · 12 new). Swiping it clears that chat's messages.",
             "Prefer dates? Tap By day on Home: the drawer then shows 🕓 Today, 📅 Yesterday and earlier days (a week back) instead of groups, so older items don't drop out.",
             "📌 Running in background holds always-on notifications (car apps, automations). Show brings them back.",
             "After NotiSift updates, Android removes its rows. They're rebuilt, but those rebuilt rows open the app rather than the exact chat. New messages link to the chat again.",

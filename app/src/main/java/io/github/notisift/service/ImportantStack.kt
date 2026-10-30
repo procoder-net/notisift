@@ -13,6 +13,8 @@ import android.service.notification.StatusBarNotification
 import io.github.notisift.R
 import io.github.notisift.SiftApp
 import io.github.notisift.data.Entry
+import io.github.notisift.engine.Category
+import io.github.notisift.engine.ChatRules
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -74,10 +76,16 @@ class ImportantStack(
     private val app get() = context.applicationContext as SiftApp
 
     /** Shows a copy of [sbn]. Call after logging it, so the header's count includes it. */
-    suspend fun show(sbn: StatusBarNotification, appLabel: String, templateKey: String): Boolean = io {
+    suspend fun show(sbn: StatusBarNotification, appLabel: String, templateKey: String, chat: Boolean = false): Boolean = io {
         val posted = try {
-            val repeats = mergeRepeats(sbn.key, templateKey)
-            val n = fromOriginal(sbn, if (repeats > 1) "$appLabel · ${repeats}× today" else appLabel)
+            val label = if (chat) {
+                val unread = mergeChat(sbn)
+                if (unread > 1) "$appLabel · $unread new" else appLabel
+            } else {
+                val repeats = mergeRepeats(sbn.key, templateKey)
+                if (repeats > 1) "$appLabel · ${repeats}× today" else appLabel
+            }
+            val n = fromOriginal(sbn, label)
             pacer.run { manager.notify(tag(sbn.key), 0, n) }
             true
         } catch (e: CancellationException) {
@@ -100,6 +108,19 @@ class ImportantStack(
             pacer.run { manager.cancel(tag(older.key), 0) }
         }
         return app.dao.countLike(templateKey, since())
+    }
+
+    /**
+     * One row per chat: chat apps that post a notification per message (or per sender) would otherwise fill the
+     * stack with one group. Older rows of the same chat leave the drawer but stay in NotiSift; swiping the row
+     * clears them all. Returns how many unhandled messages the chat has today.
+     */
+    private suspend fun mergeChat(sbn: StatusBarNotification): Int {
+        val shown = app.dao.shownImportantSince(since())
+        val thread = shown.firstOrNull { it.key == sbn.key }?.let(::threadOf) ?: return 1
+        val same = shown.filter { threadOf(it) == thread }
+        same.filter { it.key != sbn.key }.map { it.key }.distinct().forEach { pacer.run { manager.cancel(tag(it), 0) } }
+        return same.size
     }
 
     /**
@@ -131,7 +152,7 @@ class ImportantStack(
         val active = activeTags()
         // A previous build showed one row per app ("m:<package>"); those become individual rows again.
         active.filter { it.startsWith(PREFIX) && '|' !in it }.forEach { t -> pacer.run { manager.cancel(t, 0) } }
-        app.dao.shownImportantSince(since()).distinctBy { it.key }.take(MAX_ROWS)
+        app.dao.shownImportantSince(since()).distinctBy(::threadOf).take(MAX_ROWS)
             .filter { tag(it.key) !in active }
             .forEach { entry ->
                 // A live copy (with the original's buttons and link) may have arrived meanwhile; never replace it.
@@ -152,11 +173,26 @@ class ImportantStack(
         }.getOrNull()
     }
 
-    /** The user swiped or tapped a row; refresh the header's count. */
-    suspend fun onRowRemoved() = io { ensureSummary() }
+    /**
+     * The user swiped or tapped a row: everything it stands for is handled (for a chat, all its messages today),
+     * and a tap also counts as reading them.
+     */
+    suspend fun onRowRemoved(key: String, opened: Boolean) = io {
+        val shown = app.dao.shownImportantSince(since())
+        val own = shown.filter { it.key == key }
+        val threads = own.map(::threadOf).toSet()
+        // A message logged after the row went up (its row not posted yet) wasn't seen: it stays.
+        val upTo = own.maxOfOrNull { it.postedAt } ?: Long.MAX_VALUE
+        val ids = shown.filter { it.key == key || (threadOf(it) in threads && it.postedAt <= upTo) }.map { it.id }
+        if (opened && ids.isNotEmpty()) app.dao.markOpened(ids)
+        if (opened) app.dao.markOpenedKey(key, since())
+        app.dao.dismissImportant(key)
+        if (ids.isNotEmpty()) app.dao.setDismissed(ids, true)
+        ensureSummary()
+    }
 
-    /** Important notifications not yet tapped or swiped (the oldest may be folded into the app when over budget). */
-    suspend fun count(): Int = app.dao.shownImportantSince(since()).distinctBy { it.key }.size
+    /** Important notifications (one per chat) not yet tapped or swiped; the oldest may be folded away over budget. */
+    suspend fun count(): Int = app.dao.shownImportantSince(since()).distinctBy(::threadOf).size
 
     private suspend fun afterChange() {
         enforceBudget()
@@ -224,7 +260,7 @@ class ImportantStack(
      * doesn't read as "Important", so it always carries a title and the list of apps. Re-posted on every change.
      */
     private suspend fun ensureSummary() {
-        val shown = app.dao.shownImportantSince(since()).distinctBy { it.key }
+        val shown = app.dao.shownImportantSince(since()).distinctBy(::threadOf)
         if (shown.isEmpty()) {
             pacer.run { manager.cancel(SUMMARY_TAG, SUMMARY_ID) }
             return
@@ -289,6 +325,22 @@ class ImportantStack(
         private const val MAX_LINES = 6
 
         fun tag(key: String) = PREFIX + key
+
+        /** What one drawer row stands for: a whole chat for messages, otherwise the notification itself. */
+        fun threadOf(e: Entry): String =
+            if (isNamedChat(e)) "chat\u0000" + ChatRules.key(e.packageName, e.title) else "key\u0000" + e.key
+
+        /**
+         * A message whose title names its chat or sender. Generic titles ("New message", the app's name, a bare
+         * number) say nothing about who wrote, so those are never merged: one swipe must not clear unrelated people.
+         */
+        private fun isNamedChat(e: Entry): Boolean {
+            if (e.category != Category.PERSONAL.id) return false
+            val name = ChatRules.chatName(e.title)
+            return name.isNotBlank() && !name.equals(e.appLabel, ignoreCase = true) && !generic.matches(name)
+        }
+
+        private val generic = Regex("(?i)(\\d+\\s*)?(new )?(messages?|notifications?|chats?|conversations?)|[\\d\\s+()-]*")
 
         /** Rows in a stack are ordered by sort key, so a key that shrinks over time puts the newest message first. */
         fun newestFirst(time: Long): String = "%019d".format(Long.MAX_VALUE - time)

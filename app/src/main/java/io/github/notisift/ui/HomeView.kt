@@ -20,7 +20,6 @@ data class HomeView(val view: String = Tier.LATER.id, val search: String = "", v
         fun actionsOf(tier: Tier): List<String> = Action.entries.filter { Tier.of(it) == tier }.map { it.id }
 
         /** A LIKE pattern matching [query] anywhere, with `%`, `_` and `\` taken literally (the DAO escapes with `\`). */
-        fun likePattern(query: String): String =
-            "%" + query.trim().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        fun likePattern(query: String): String = io.github.notisift.data.Like.contains(query)
     }
 }

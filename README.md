@@ -89,8 +89,16 @@ so the Later pile stays readable instead of being one long list.
   by mistake, even a whole day's stack in the drawer? **Home → ↩️ Cleared** puts it back.
 - **Find it again.** 🔍 on Home searches every notification by app, sender or text.
 - **Chats, not just apps.** A 1:1 chat and a 300-member community group aren't equally urgent. Set any chat to
-  *Only when mentioned* or *Mute*. When groups flood the top, Home offers to quiet them in one tap (it never does
-  it on its own).
+  *Only when mentioned* or *Mute*. Each chat is **one row** in the drawer ("WhatsApp · 12 new"), not one per message.
+- **Smart group chats.** Sale posts, forwards and groups having a very busy day (20+ messages) wait in Later unless
+  someone @mentions you. 1:1 chats and Android *priority conversations* are never quieted, and Home tells you what was
+  quieted with one tap to keep it on top. Off switch: *Settings → Groups*.
+- **Learns what you never read.** A group with lots of messages this week and none opened? Home asks whether to show it
+  only when you're mentioned. It asks; it never does it on its own.
+- **Later at set times.** Have waiting groups appear in the drawer at, say, 9 am and 6 pm instead of all day
+  (*Settings → Groups*). Everything is always in the app.
+- **Optional AI summaries.** With an AI key, each waiting group can carry one line such as "40 sale posts, nothing for
+  you", so you can clear it without reading. Off by default.
 - **It learns from you.** Swipe right = "this was important", swipe left = done. Each correction becomes a rule for
   similar notifications, and every change can be undone.
 - **Safe by default.** Codes, messages from people, money movement, calls and alarms are never hidden automatically.
@@ -237,6 +245,9 @@ and keeps its data).
 | Keep history shorter or longer | **Settings** → history retention, or *Delete notification history* |
 | See everything by date instead of by group | **Home → By day** (the drawer switches too) |
 | Quiet a busy group chat | Open one of its messages on **Home** → ⭐ Always on top / @ Only when mentioned / 🔕 Mute |
+| Stop NotiSift quieting group chats by itself | **Settings → Groups** → *Smart group chats* off (or *Keep them on top* on Home's 🤫 card) |
+| See waiting groups only at set times | **Settings → Groups** → *Later shows up in the drawer* → e.g. 9 am & 6 pm |
+| One-line AI summary on each waiting group | **Settings → Groups** → *AI summary on waiting groups* (needs an AI key) |
 | Get @mentions through from muted groups | **Settings → Your choices** → *Names people @mention you by* |
 | Pause for a while | Quick Settings tile, or **⋯ → Preview only** on the status card |
 | Move to a new phone | **Settings → Move to a new phone → Export**, then **Import** the file on the new phone. Brings app choices, corrections, keyword and chat rules, groups and settings; never your API key or notification history |
@@ -251,7 +262,9 @@ Your choices always win over the AI. Protected groups (people, codes, money, cal
 retention period. You can put any of them back on top.
 
 **Will it hide a code or a message from a person?** Not automatically. Those are protected and always stay on top,
-whatever the model says. Only your own choice for a chat (Mute, or Only when mentioned) moves its messages to Later.
+whatever the model says. 1:1 chats only leave the top through your own choice (Mute, or Only when mentioned). In
+*group* chats, *Smart group chats* sends sale posts, forwards and very busy days to Later, but anything that mentions
+you still goes on top; turn it off in *Settings → Groups*.
 
 **Why did a notification still make a sound?** NotiSift sorts a notification right after Android posts it, so the
 app's own sound can play first. For apps you mostly send to Later or Junk, make their channels silent in
@@ -357,6 +370,8 @@ still sees them.
 - With a cloud model, the **title and text of notifications** that reach the model step are sent to that
   provider. The app scan sends app names, channel ids and a few notification titles, never from chats, codes,
   money or calls. Codes, conversations, calls, alarms and ongoing notifications are decided on the phone and never sent.
+- *AI summary on waiting groups* (off by default) sends the titles and texts of waiting groups, including muted or
+  quieted group chats, to your provider for one line per group. Codes and money groups are never sent.
 - Use Ollama or LM Studio on your LAN, or turn AI off, to keep everything local.
 - Notification text is treated as untrusted. Prompts tell the model to ignore instructions inside it, and the
   answer is validated against a fixed set of actions and groups.

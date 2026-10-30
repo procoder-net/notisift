@@ -13,6 +13,7 @@ import io.github.notisift.BuildConfig
 import io.github.notisift.SiftApp
 import io.github.notisift.data.Entry
 import io.github.notisift.engine.Action
+import io.github.notisift.engine.Category
 import io.github.notisift.engine.LocalRules
 import io.github.notisift.engine.NotificationInput
 import io.github.notisift.engine.Source
@@ -109,10 +110,14 @@ class SiftListener : NotificationListenerService() {
         lastHash.remove(sbn.key)
         // Whatever removed one of NotiSift's rows, the next refresh must be allowed to post it again.
         if (sbn.packageName == packageName) app.digest.forget(sbn.tag, sbn.id)
+        // Tapping an original (still in the drawer) means it was read: teaches "you never open this chat".
+        if (sbn.packageName != packageName && reason == REASON_CLICK) {
+            scope.launch { safely { app.dao.markOpenedKey(sbn.key, System.currentTimeMillis() - SiftApp.DAY_MS) } }
+        }
         if (sbn.packageName != packageName || reason !in userRemovals) return
         // The user swiped or tapped one of NotiSift's rows: it's handled, so don't bring it back on rebuild.
         val key = ImportantStack.keyOf(sbn.tag)
-        if (key != null) scope.launch { safely { app.dao.dismissImportant(key); app.digest.important.onRowRemoved() } }
+        if (key != null) scope.launch { safely { app.digest.important.onRowRemoved(key, opened = reason == REASON_CLICK) } }
         else scope.launch { safely { app.digest.onUserRemoved(sbn.tag, sbn.id) } }
     }
 
@@ -180,7 +185,7 @@ class SiftListener : NotificationListenerService() {
         )
         if (!wantsRemoval) return verdict
         // Show the copy before removing the original, so a failure leaves the original in place.
-        if (mirror && !app.digest.important.show(sbn, input.appLabel, input.templateKey)) {
+        if (mirror && !app.digest.important.show(sbn, input.appLabel, input.templateKey, chat = verdict.category == Category.PERSONAL)) {
             app.dao.setApplied(id, false)
             return verdict
         }
@@ -304,9 +309,16 @@ class SiftListener : NotificationListenerService() {
             isSensitive = isSensitive(title, text),
             // EXTRA_SELF_DISPLAY_NAME is API 28+; the key string is the same on every version.
             selfName = x.getCharSequence("android.selfDisplayName")?.toString().orEmpty(),
+            isPriorityConversation = isPriority(sbn.key),
             postedAt = sbn.postTime,
         )
     }
+
+    /** Android 11+: the user starred this chat as a priority conversation in the system's settings. */
+    private fun isPriority(key: String): Boolean = Build.VERSION.SDK_INT >= 30 && runCatching {
+        val ranking = Ranking()
+        currentRanking?.getRanking(key, ranking) == true && ranking.channel?.isImportantConversation == true
+    }.getOrDefault(false)
 
     private fun label(pkg: String): String = labels.getOrPut(pkg) {
         runCatching { packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0)).toString() }.getOrDefault(pkg)

@@ -19,7 +19,10 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -52,6 +55,7 @@ import io.github.notisift.engine.CategoryChoices
 import io.github.notisift.engine.GroupChoice
 import io.github.notisift.engine.DecisionEngine
 import io.github.notisift.engine.KeywordRule
+import io.github.notisift.engine.LaterSchedule
 import io.github.notisift.engine.Tier
 import io.github.notisift.llm.ProviderDetector
 import io.github.notisift.llm.ProviderKind
@@ -91,6 +95,18 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier) {
             )
             val choices = CategoryChoices.parse(s.categoryChoices)
             groups.forEach { (c, count) -> GroupRow(c, count, choices[c] ?: GroupChoice.AI) { vm.setGroupChoice(c, it) } }
+            HorizontalDivider()
+            SwitchRow(
+                "Smart group chats", "Sale posts, forwards and very busy groups wait in Later; @mentions and 1:1 chats stay on top",
+                s.smartGroups,
+            ) { on -> vm.updateSettings { it.copy(smartGroups = on) } }
+            LaterTimes(s.laterTimes) { times -> vm.updateSettings { it.copy(laterTimes = times) } }
+            SwitchRow(
+                "AI summary on waiting groups",
+                if (vm.cloudProvider() == null) "Needs an AI key (Advanced). One line per group, e.g. \"40 sale posts, nothing for you\""
+                else "Sends waiting notifications (never codes or money) to ${vm.cloudProvider()} for one line per group",
+                s.aiSummaries,
+            ) { on -> vm.updateSettings { it.copy(aiSummaries = on) } }
         }
 
         if (suggestions.isNotEmpty()) Section("Make it a rule") {
@@ -291,6 +307,19 @@ private fun Section(title: String, content: @Composable () -> Unit) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             content()
+        }
+    }
+}
+
+/** When waiting rows show up in the drawer: as they arrive, or only at set hours. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun LaterTimes(current: String, onChange: (String) -> Unit) {
+    Text("🕓 Later shows up in the drawer", style = MaterialTheme.typography.bodyLarge)
+    Text("Everything is always in NotiSift's Later tab; this only sets when the drawer shows it.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        LaterSchedule.PRESETS.forEach { (value, label) ->
+            FilterChip(selected = current == value, onClick = { onChange(value) }, label = { Text(label) })
         }
     }
 }

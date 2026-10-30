@@ -18,6 +18,9 @@ interface EngineStore {
 
     /** Groups worth offering the AI on this phone (see [Category.relevant]). */
     suspend fun categories(): List<Category> = Category.entries
+
+    /** Messages logged in the last day from this chat ([ChatRules.chatName]) of this app. */
+    suspend fun recentChatMessages(packageName: String, chat: String): Int = 0
 }
 
 data class EngineSettings(
@@ -35,6 +38,8 @@ data class EngineSettings(
     val chatRules: Map<String, ChatMode> = emptyMap(),
     /** Names people @mention the user by, for "only when mentioned" chats. */
     val myNames: List<String> = emptyList(),
+    /** Group chats without a choice of their own: sale posts and busy days wait in Later, @mentions stay on top. */
+    val smartGroups: Boolean = true,
 )
 
 /**
@@ -62,6 +67,8 @@ class DecisionEngine(
 
         val mode = store.appMode(n.packageName) ?: if (settings.manageUnlistedApps) AppMode.AUTO else AppMode.UNMANAGED
         if (mode == AppMode.UNMANAGED) return null
+        // Starred in Android's own conversation settings: that is already the user's choice.
+        if (communication && n.isPriorityConversation) return Verdict(Action.KEEP, Category.PERSONAL, 1.0, Source.PROTECTED, "Priority conversation")
         // An explicit per-app choice is the only thing allowed to remove conversations.
         LocalRules.fromAppMode(mode, n, store.appCategory(n.packageName))?.let { return it }
 
@@ -71,6 +78,7 @@ class DecisionEngine(
         if (communication) {
             // Only the user's own "Junk"/"Important" tap on this exact template overrides conversation protection.
             if (cached?.source == Source.CORRECTION) return cached
+            smartGroup(n, settings)?.let { return it }
             return Verdict(Action.KEEP, Category.PERSONAL, 1.0, Source.PROTECTED, "Conversation or email")
         }
         cached?.let { return guard(withChoice(it, settings), n, settings.inboxMode).also { v -> noteRemoval(n, v) } }
@@ -87,12 +95,32 @@ class DecisionEngine(
             ChatMode.ALWAYS -> verdict(Action.KEEP, "Always on top: your choice for this chat")
             ChatMode.MUTE -> verdict(Action.BUNDLE, "Muted chat: waits in Later")
             ChatMode.MENTIONS -> {
-                val names = s.myNames + n.selfName.takeUnless { it.isBlank() || it.equals("you", ignoreCase = true) }.let(::listOfNotNull)
-                if (ChatRules.mentions(n.text, names)) verdict(Action.KEEP, "You were mentioned")
+                if (ChatRules.mentions(n.text, mentionNames(n, s))) verdict(Action.KEEP, "You were mentioned")
                 else verdict(Action.BUNDLE, "Busy chat: only mentions go on top")
             }
         }
     }
+
+    /**
+     * A group chat with no choice of its own: a sale post or forward waits in Later, and so does everything on a
+     * busy day ([GroupSmarts.BUSY_PER_DAY]+ messages) unless it mentions the user. 1:1 chats never get here.
+     */
+    private suspend fun smartGroup(n: NotificationInput, s: EngineSettings): Verdict? {
+        if (!s.smartGroups || !ChatRules.looksLikeGroup(n.title, n.text)) return null
+        val names = mentionNames(n, s)
+        if (ChatRules.mentions(n.text, names)) return null
+        // Until NotiSift knows the user's name, any @mention might be them: never risk hiding it.
+        if (names.isEmpty() && anyMention.containsMatchIn(n.text)) return null
+        fun later(reason: String) = Verdict(Action.BUNDLE, Category.PERSONAL, 1.0, Source.SMART_GROUP, reason)
+        if (GroupSmarts.isPromo(n.text)) return later("Sale post or forward in a group chat")
+        val today = store.recentChatMessages(n.packageName, ChatRules.chatName(n.title))
+        return if (today + 1 >= GroupSmarts.BUSY_PER_DAY) later("Busy group (${today + 1} today): only mentions go on top") else null
+    }
+
+    private val anyMention = Regex("(?:^|[\\s(])@\\S")
+
+    private fun mentionNames(n: NotificationInput, s: EngineSettings) =
+        s.myNames + n.selfName.takeUnless { it.isBlank() || it.equals("you", ignoreCase = true) }.let(::listOfNotNull)
 
     private suspend fun decideFresh(n: NotificationInput, settings: EngineSettings, template: String, cacheable: Boolean): Verdict {
         val appCategory = store.appCategory(n.packageName)

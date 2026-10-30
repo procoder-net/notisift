@@ -83,6 +83,9 @@ fun HomeScreen(vm: MainViewModel, modifier: Modifier, tier: String, onTier: (Str
     val byDay = settings?.groupByDay == true
     val busy by vm.busyChats.collectAsState()
     var busyDismissed by rememberSaveable { mutableStateOf(false) }
+    val quieted by vm.quietedGroups.collectAsState()
+    var quietedSeen by rememberSaveable { mutableStateOf(false) }
+    val ignored by vm.ignoredGroups.collectAsState()
     var confirmClear by remember { mutableStateOf<Tier?>(null) }
     var confirmRestore by remember { mutableStateOf<List<Entry>?>(null) }
     val listState = rememberLazyListState()
@@ -121,6 +124,12 @@ fun HomeScreen(vm: MainViewModel, modifier: Modifier, tier: String, onTier: (Str
         }
         if (nothingYet && settings?.stopped == false) item(key = "sample") { SampleInbox() }
         if (offerAi) item(key = "ai") { AiKeyCard(onAddKey = onAddAiKey, onNotNow = { vm.updateSettings { it.copy(aiTipDismissed = true) } }) }
+        if (quieted.isNotEmpty() && !quietedSeen) item(key = "quieted") {
+            QuietedGroupsCard(quieted, onKeep = { vm.keepGroupsOnTop(quieted) }, onOk = { quietedSeen = true })
+        }
+        if (ignored.isNotEmpty()) item(key = "ignored") {
+            IgnoredGroupsCard(ignored, onMentions = { vm.setChatModes(ignored, ChatMode.MENTIONS) }, onNotNow = { vm.skipIgnored(ignored) })
+        }
         if (busy.isNotEmpty() && !busyDismissed) item(key = "busy") { BusyChatsCard(busy, onMentions = { vm.setChatModes(busy, ChatMode.MENTIONS) }, onLater = { busyDismissed = true }) }
         if (shown != null && entries.isNotEmpty()) item(key = "clear-all") {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -326,4 +335,51 @@ private fun BusyChatsCard(busy: List<BusyChat>, onMentions: () -> Unit, onLater:
             }
         }
     }
+}
+
+/** Says what Smart group chats did today, so nothing disappears silently, with one tap to undo it. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun QuietedGroupsCard(groups: List<BusyChat>, onKeep: () -> Unit, onOk: () -> Unit) {
+    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("🤫 Quieted ${groups.size} group chat${if (groups.size == 1) "" else "s"}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text(
+                "Sale posts, forwards and busy days wait in Later. Messages that mention you still go on top (add your names in Settings → Your choices). 1:1 chats are never quieted.",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            ChatList(groups)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = onKeep) { Text("Keep them on top") }
+                androidx.compose.material3.Button(onClick = onOk) { Text("OK") }
+            }
+        }
+    }
+}
+
+/** Learned from what you do: groups with lots of messages this week and none of them opened. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun IgnoredGroupsCard(groups: List<BusyChat>, onMentions: () -> Unit, onNotNow: () -> Unit) {
+    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("🧠 You never open these", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text(
+                "${if (groups.size == 1) "This group" else "These ${groups.size} groups"} sent many messages this week and you opened none. " +
+                    "Show them on top only when someone mentions you?",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            ChatList(groups)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                androidx.compose.material3.Button(onClick = onMentions) { Text("Only when mentioned") }
+                TextButton(onClick = onNotNow) { Text("Not now") }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ChatList(groups: List<BusyChat>) {
+    groups.take(4).forEach { Text("· ${it.chat} (${it.appLabel}) · ${it.count}", style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+    if (groups.size > 4) Text("· and ${groups.size - 4} more", style = MaterialTheme.typography.bodySmall)
 }
