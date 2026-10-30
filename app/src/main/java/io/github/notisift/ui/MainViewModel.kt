@@ -21,10 +21,12 @@ import io.github.notisift.engine.ChatMessage
 import io.github.notisift.engine.ChatMode
 import io.github.notisift.engine.ChatRules
 import io.github.notisift.engine.GroupChoice
+import io.github.notisift.engine.GroupSmarts
 import io.github.notisift.engine.RuleSuggester
 import io.github.notisift.engine.Source
 import io.github.notisift.engine.RuleSuggestion
 import io.github.notisift.engine.Tier
+import io.github.notisift.service.ImportantStack
 import io.github.notisift.llm.LlmClient
 import io.github.notisift.llm.ProviderDetector
 import io.github.notisift.scan.DeviceScanner
@@ -174,6 +176,41 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val chats = list.filter { it.action == Action.KEEP.id && it.category == Category.PERSONAL.id && it.postedAt >= since }
         ChatRules.busyGroups(chats.map { ChatMessage(it.packageName, it.appLabel, it.title, it.text) }, rules)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /** Group chats NotiSift quieted on its own today (sale posts, busy days), so the user can see and undo it. */
+    val quietedGroups: StateFlow<List<BusyChat>> = combine(dao.smartQuieted(System.currentTimeMillis() - SiftApp.DAY_MS), chatRules) { list, rules ->
+        list.filter { ChatRules.key(it.packageName, it.title) !in rules }
+            .groupBy { ChatRules.key(it.packageName, it.title) }.values
+            .map { BusyChat(it.first().packageName, it.first().appLabel, ChatRules.chatName(it.first().title), it.size) }
+            .sortedByDescending { it.count }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /** Groups with many messages this week and none opened: offered "only when mentioned", never applied silently. */
+    val ignoredGroups: StateFlow<List<BusyChat>> = combine(
+        dao.chatActivity(System.currentTimeMillis() - 7 * SiftApp.DAY_MS), chatRules, app.settings.map { GroupSmarts.parseSkipped(it?.chatTipsSkipped.orEmpty()) }, quietedGroups,
+    ) { history, rules, skipped, quieted ->
+        // Groups already quieted today are on the 🤫 card; asking about them twice would be noise.
+        val already = quieted.map { ChatRules.key(it.packageName, it.chat) }
+        GroupSmarts.ignoredGroups(history, rules, skipped + already).map { BusyChat(it.packageName, it.appLabel, it.chat, it.count) }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /** "Not now" on the never-opened suggestion: don't ask about these chats again. */
+    fun skipIgnored(chats: List<BusyChat>) = viewModelScope.launch {
+        app.settingsStore.update { s ->
+            val keys = GroupSmarts.parseSkipped(s.chatTipsSkipped) + chats.map { ChatRules.key(it.packageName, it.chat) }
+            s.copy(chatTipsSkipped = GroupSmarts.formatSkipped(keys))
+        }
+    }
+
+    /** "Keep on top" on the quieted card: these groups always stay on top, and today's quieted messages go back. */
+    fun keepGroupsOnTop(chats: List<BusyChat>) = viewModelScope.launch {
+        val keys = chats.map { ChatRules.key(it.packageName, it.chat) }.toSet()
+        val quieted = dao.allIn(HomeView.actionsOf(Tier.LATER)).filter { it.source == Source.SMART_GROUP.name && ChatRules.key(it.packageName, it.title) in keys }
+        setChatModes(chats, ChatMode.ALWAYS).join()
+        dao.setDecision(quieted.map { it.id }, Action.KEEP.id, Source.CHAT.name)
+        quieted.filter { it.applied }.distinctBy { it.key }.forEach { app.digest.important.restore(it.copy(action = Action.KEEP.id)) }
+        app.digest.requestRefresh()
+    }
 
     fun setChatMode(entry: Entry, mode: ChatMode?) = applyChatMode(listOf(entry.packageName to entry.title), mode)
 
@@ -445,13 +482,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private suspend fun clear(entries: List<Entry>): suspend () -> Unit {
         val (important, rest) = entries.partition { Tier.of(it.action) == Tier.IMPORTANT }
         val shown = important.distinctBy { it.key }.filter { it.applied }
-        val ids = rest.map { it.id } + important.distinctBy { it.key }.flatMap { dao.openImportantIds(it.key) } + important.map { it.id }
+        // A chat is one row in the drawer, so done with one of its messages is done with the chat's row.
+        val threads = important.filter { it.category == Category.PERSONAL.id }.map(ImportantStack::threadOf).toSet()
+        val chat = if (threads.isEmpty()) emptyList() else dao.shownImportantSince(System.currentTimeMillis() - SiftApp.DAY_MS).filter { ImportantStack.threadOf(it) in threads }
+        val ids = rest.map { it.id } + important.distinctBy { it.key }.flatMap { dao.openImportantIds(it.key) } + important.map { it.id } + chat.map { it.id }
+        val rows = (shown + chat.filter { it.applied }).sortedByDescending { it.postedAt }
         dao.setDismissed(ids.distinct(), true)
-        shown.forEach { app.digest.important.remove(it.key) }
+        rows.distinctBy { it.key }.forEach { app.digest.important.remove(it.key) }
         app.digest.requestRefresh()
         return {
             dao.setDismissed(ids.distinct(), false)
-            shown.forEach { app.digest.important.restore(it) }
+            rows.distinctBy(ImportantStack::threadOf).forEach { app.digest.important.restore(it) }
             app.digest.requestRefresh()
         }
     }
@@ -460,7 +501,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Opening a notification means it's been seen, so it leaves NotiSift as it would leave the shade. */
     fun open(entry: Entry) = viewModelScope.launch {
-        if (app.digest.openOriginal(entry)) clear(listOf(entry)) else _toast.value = "Can't open ${entry.appLabel}"
+        if (app.digest.openOriginal(entry)) {
+            dao.markOpened(listOf(entry.id))
+            clear(listOf(entry))
+        } else _toast.value = "Can't open ${entry.appLabel}"
     }
 
     /** Clear on a group or day: exactly the items under that header, with Undo. */

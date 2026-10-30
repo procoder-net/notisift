@@ -41,6 +41,7 @@
             </intent-filter>
         </service>
         <receiver android:name=".service.ClearGroupReceiver" android:exported="false" />
+        <receiver android:name=".service.LaterAlarm" android:exported="false" />
         <service
             android:name=".service.PauseTile"
             android:label="@string/app_name"

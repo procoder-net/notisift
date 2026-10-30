@@ -4,6 +4,7 @@ import io.github.notisift.scan.Offline
 import io.github.notisift.engine.Action
 import io.github.notisift.engine.AppMode
 import io.github.notisift.engine.Category
+import io.github.notisift.engine.ChatRules
 import io.github.notisift.engine.EngineStore
 import io.github.notisift.engine.Source
 import io.github.notisift.engine.Verdict
@@ -22,6 +23,12 @@ class RoomEngineStore(
         val p = dao.policy(packageName) ?: return ""
         return Offline.match(p.packageName, p.label)?.second?.takeIf { it != Category.SYSTEM }?.id
             ?: p.appCategory.ifBlank { p.suggestedCategory }
+    }
+
+    override suspend fun recentChatMessages(packageName: String, chat: String): Int {
+        if (chat.isBlank()) return 0
+        // Titles may start with direction marks, so match anywhere and compare the cleaned name exactly.
+        return dao.chatTitlesSince(packageName, Like.contains(chat), clock() - DAY_MS).count { ChatRules.chatName(it).equals(chat, ignoreCase = true) }
     }
 
     @Volatile private var relevant: Pair<Long, List<Category>>? = null
@@ -60,5 +67,6 @@ class RoomEngineStore(
 
     companion object {
         const val CACHE_TTL_MS = 7L * 24 * 60 * 60 * 1000
+        private const val DAY_MS = 24L * 60 * 60 * 1000
     }
 }

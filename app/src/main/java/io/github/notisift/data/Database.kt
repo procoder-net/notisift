@@ -38,6 +38,8 @@ data class Entry(
     val dismissed: Boolean = false,
     /** When it was cleared (swiped, Clear, opened), for "Recently cleared". 0 while it isn't. */
     @ColumnInfo(defaultValue = "0") val dismissedAt: Long = 0,
+    /** When the user opened it (from NotiSift or its drawer row); 0 = never. Teaches which chats they read. */
+    @ColumnInfo(defaultValue = "0") val openedAt: Long = 0,
 )
 
 @Entity(tableName = "policies")
@@ -102,6 +104,27 @@ interface SiftDao {
     fun clearedCount(): Flow<Int>
 
     @Query("SELECT * FROM entries WHERE id = :id") suspend fun entry(id: Long): Entry?
+
+    @Query("UPDATE entries SET openedAt = CAST(strftime('%s','now') AS INTEGER) * 1000 WHERE id IN (:ids)")
+    suspend fun markOpened(ids: List<Long>)
+
+    @Query("UPDATE entries SET openedAt = CAST(strftime('%s','now') AS INTEGER) * 1000 WHERE `key` = :key AND postedAt >= :since")
+    suspend fun markOpenedKey(key: String, since: Long)
+
+    /** Chat titles from one app since [since] that contain [prefix] (a LIKE pattern, backslash escapes). */
+    @Query("SELECT title FROM entries WHERE packageName = :pkg AND category = 'personal' AND postedAt >= :since AND title LIKE :prefix ESCAPE '\\'")
+    suspend fun chatTitlesSince(pkg: String, prefix: String, since: Long): List<String>
+
+    /**
+     * Chat messages of the last week that NotiSift showed in its own stack (so a tap was seen), with whether they were
+     * opened: feeds "you never open this group".
+     */
+    @Query("SELECT packageName, appLabel, title, text, openedAt > 0 AS opened FROM entries WHERE category = 'personal' AND applied = 1 AND postedAt >= :since ORDER BY postedAt DESC LIMIT 5000")
+    fun chatActivity(since: Long): Flow<List<io.github.notisift.engine.ChatActivity>>
+
+    /** Group messages NotiSift quieted on its own today and nobody has handled yet. */
+    @Query("SELECT * FROM entries WHERE source = 'SMART_GROUP' AND dismissed = 0 AND postedAt >= :since ORDER BY postedAt DESC")
+    fun smartQuieted(since: Long): Flow<List<Entry>>
     @Query("SELECT * FROM entries WHERE action != 'keep' AND applied = 1 AND dismissed = 0 AND postedAt >= :since ORDER BY postedAt DESC")
     suspend fun removedEntriesSince(since: Long): List<Entry>
 
@@ -185,18 +208,25 @@ interface SiftDao {
     @Query("UPDATE entries SET action = :action, source = :source WHERE id IN (:ids)") suspend fun setDecision(ids: List<Long>, action: String, source: String)
 }
 
-@Database(entities = [Entry::class, Policy::class, CachedDecision::class], version = 2, exportSchema = true)
+@Database(entities = [Entry::class, Policy::class, CachedDecision::class], version = 3, exportSchema = true)
 abstract class SiftDatabase : RoomDatabase() {
     abstract fun dao(): SiftDao
 
     companion object {
         fun create(context: Context): SiftDatabase =
-            Room.databaseBuilder(context, SiftDatabase::class.java, "notisift.db").addMigrations(MIGRATION_1_2).build()
+            Room.databaseBuilder(context, SiftDatabase::class.java, "notisift.db").addMigrations(MIGRATION_1_2, MIGRATION_2_3).build()
 
         /** 0.1.2: remember when each notification was cleared, so cleared ones can be found and restored. */
         val MIGRATION_1_2 = object : Migration(1, 2) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE entries ADD COLUMN dismissedAt INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
+        /** 0.1.2: remember what was opened, so NotiSift can offer to quiet chats that are never read. */
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE entries ADD COLUMN openedAt INTEGER NOT NULL DEFAULT 0")
             }
         }
     }

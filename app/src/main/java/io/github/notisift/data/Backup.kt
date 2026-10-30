@@ -38,6 +38,9 @@ data class BackupSettings(
     val groupByDay: Boolean = false,
     val manageUnlistedApps: Boolean = true,
     val retentionDays: Int = 14,
+    val smartGroups: Boolean = true,
+    val laterTimes: String = "",
+    val aiSummaries: Boolean = false,
 )
 
 @Serializable
@@ -65,6 +68,7 @@ object Backup {
             chatRules = settings.chatRules, myNames = settings.myNames, categoryChoices = settings.categoryChoices,
             inboxMode = settings.inboxMode, replaceShade = settings.replaceShade, digest = settings.digest,
             groupByDay = settings.groupByDay, manageUnlistedApps = settings.manageUnlistedApps, retentionDays = settings.retentionDays,
+            smartGroups = settings.smartGroups, laterTimes = settings.laterTimes, aiSummaries = settings.aiSummaries,
         ),
         // Only apps you (or a suggestion you accepted) set: scan suggestions are redone on the new phone.
         apps = policies.filter { it.mode.isNotBlank() }.map { BackupApp(it.packageName, it.label, it.mode, it.instructions) },
@@ -87,6 +91,7 @@ object Backup {
                 threshold = s.threshold.coerceIn(AppSettings.THRESHOLD_RANGE), rules = s.rules.take(4_000), keywordRules = s.keywordRules.take(10_000),
                 chatRules = s.chatRules.take(20_000), myNames = s.myNames.take(500), categoryChoices = s.categoryChoices.take(4_000),
                 retentionDays = s.retentionDays.coerceIn(AppSettings.RETENTION_DAYS),
+                laterTimes = io.github.notisift.engine.LaterSchedule.parse(s.laterTimes).joinToString(","),
             ),
             apps = raw.apps.filter { packageName.matches(it.packageName) && AppMode.fromId(it.mode) != null }
                 .distinctBy { it.packageName }.take(5_000)
@@ -103,5 +108,6 @@ object Backup {
         rules = s.rules.ifBlank { current.rules }, keywordRules = s.keywordRules, chatRules = s.chatRules, myNames = s.myNames,
         categoryChoices = s.categoryChoices, inboxMode = s.inboxMode, replaceShade = s.replaceShade, digest = s.digest,
         groupByDay = s.groupByDay, manageUnlistedApps = s.manageUnlistedApps, retentionDays = s.retentionDays,
+        smartGroups = s.smartGroups, laterTimes = s.laterTimes, aiSummaries = s.aiSummaries,
     )
 }

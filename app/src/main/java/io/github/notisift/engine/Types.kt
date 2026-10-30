@@ -135,7 +135,7 @@ enum class Source(val label: String) {
     PROTECTED("Protected"), OTP("Code detected"), KEYWORD("Your keyword rule"), APP_POLICY("App policy"),
     DUPLICATE("Duplicate"), CORRECTION("Your correction"), CACHE("Learned"), MODEL("AI model"),
     HEURISTIC("Offline rules"), FALLBACK("Kept: uncertain"), INBOX("Inbox: not important"), GROUP("Your group choice"),
-    CHAT("Your chat choice"),
+    CHAT("Your chat choice"), SMART_GROUP("Smart group chats"),
 }
 
 /** Android-free snapshot of a posted notification. */
@@ -157,6 +157,8 @@ data class NotificationInput(
     val isSensitive: Boolean = false,
     /** The user's own name in this chat app (MessagingStyle), used to spot @mentions. */
     val selfName: String = "",
+    /** The user marked this chat a priority conversation in Android's own settings (Android 11+). */
+    val isPriorityConversation: Boolean = false,
     val postedAt: Long = System.currentTimeMillis(),
 ) {
     /** Exact identity of what the user sees; full string, so no hash collisions. */

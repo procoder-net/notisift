@@ -17,6 +17,8 @@ import io.github.notisift.SiftApp
 import io.github.notisift.data.Entry
 import io.github.notisift.engine.Category
 import io.github.notisift.engine.Heuristics
+import io.github.notisift.engine.LaterSchedule
+import io.github.notisift.llm.GroupSummaries
 import io.github.notisift.engine.NotificationInput
 import io.github.notisift.engine.Tier
 import io.github.notisift.ui.DaySection
@@ -41,6 +43,7 @@ class DigestNotifier(private val context: Context) {
     private var pending: Job? = null
     private val pacer = Pacer()
     val important = ImportantStack(context, manager, pacer) { open(Tier.LATER, null) }
+    private val summaries = GroupSummaries({ request -> app.summaryModel()?.completeJson(request) })
 
     init {
         // Older builds had per-tier digest and junk channels; one quiet line replaces them.
@@ -96,7 +99,13 @@ class DigestNotifier(private val context: Context) {
         val byDay = app.settings.value?.groupByDay == true
         // By day looks back a week so older items keep a row; by group shows the last day.
         val since = now - if (byDay) DAY_LOOKBACK * SiftApp.DAY_MS else SiftApp.DAY_MS
-        val later = regroup(app.dao.removedEntriesSince(since).filter { Tier.of(it.action) == Tier.LATER })
+        val settings = app.settings.value
+        // "Later at set times": what arrived after the latest delivery time waits for the next one.
+        val cutoff = LaterSchedule.lastSlot(now, LaterSchedule.parse(settings?.laterTimes.orEmpty()))
+        // Settings not loaded yet (process start): leave any armed alarm alone rather than cancel it.
+        if (settings != null) LaterAlarm.schedule(context, LaterSchedule.nextSlot(now, LaterSchedule.parse(settings.laterTimes)))
+        val later = regroup(app.dao.removedEntriesSince(since).filter { Tier.of(it.action) == Tier.LATER && (cutoff == null || it.postedAt <= cutoff) })
+        summarizeLater(later, byDay)
         val groups = if (byDay) emptyList() else later.groupBy { Category.fromId(it.category) }.entries.sortedByDescending { it.value.size }
         val days = if (byDay) drawerDays(later, Entry::postedAt, now, MAX_DAY_STACKS) else emptyList()
         val stacks = days.map { day -> day to topGroups(day.items, MAX_DAY_GROUPS) { Category.fromId(it.category) } }
@@ -142,13 +151,15 @@ class DigestNotifier(private val context: Context) {
 
     private suspend fun postGroup(category: Category, entries: List<Entry>, rank: Int) {
         val apps = entries.map { it.appLabel }.distinct()
+        val ai = aiLine(category, entries)
         val style = Notification.InboxStyle().setBigContentTitle("${category.emoji()} ${category.label} · ${entries.size}")
+        ai?.let { style.addLine("✨ $it") }
         entries.take(5).forEach { e -> style.addLine("${e.appLabel}: ${e.title.takeIf { it.isNotBlank() && it != e.appLabel } ?: e.text}".take(90)) }
         if (entries.size > 5) style.setSummaryText("+${entries.size - 5} more")
         val n = Notification.Builder(context, DIGEST_CHANNEL)
             .setSmallIcon(R.drawable.ic_sift)
             .setContentTitle("${category.emoji()} ${category.label} · ${entries.size}")
-            .setContentText(apps.take(3).joinToString(", ") + if (apps.size > 3) " +${apps.size - 3}" else "")
+            .setContentText(ai?.let { "✨ $it" } ?: (apps.take(3).joinToString(", ") + if (apps.size > 3) " +${apps.size - 3}" else ""))
             .setStyle(style)
             .setGroup(GROUP)
             .setSortKey("%02d".format(rank))
@@ -175,9 +186,11 @@ class DigestNotifier(private val context: Context) {
             val rowTitle = if (category != null) "${category.emoji()} ${category.label} · ${row.items.size}"
             else "➕ More groups · ${row.items.size}"
             val apps = row.items.map { it.appLabel }.distinct()
-            val text = if (category != null) apps.take(3).joinToString(", ") + if (apps.size > 3) " +${apps.size - 3}" else ""
+            val ai = category?.let { aiLine(it, row.items, day.title) }
+            val text = ai?.let { "✨ $it" } ?: if (category != null) apps.take(3).joinToString(", ") + if (apps.size > 3) " +${apps.size - 3}" else ""
             else row.groups.joinToString(" · ") { (c, list) -> "${c.emoji()} ${list.size}" }
             val style = Notification.InboxStyle().setBigContentTitle("$rowTitle · ${day.title}")
+            ai?.let { style.addLine("✨ $it") }
             row.items.take(ROW_LINES).forEach { e -> style.addLine(lineFor(e, showGroup = category == null)) }
             if (row.items.size > ROW_LINES) style.addLine("+${row.items.size - ROW_LINES} more · tap to see all")
             val n = Notification.Builder(context, DIGEST_CHANNEL)
@@ -215,6 +228,29 @@ class DigestNotifier(private val context: Context) {
             .addAction(Notification.Action.Builder(null, "Clear all", clearIds(DAY_BASE + slot, day.items)).build())
             .build()
         pacer.notifyIfChanged(manager, TAG, DAY_BASE + slot, summary)
+    }
+
+    /** Groups whose content is never sent for a summary: codes and money stay on the phone. */
+    private val keptOnPhone = setOf(Category.SECURITY, Category.FINANCE)
+
+    private fun summaryKey(category: Category, day: String?) = "${day.orEmpty()}|${category.id}"
+
+    private fun aiLine(category: Category, entries: List<Entry>, day: String? = null): String? =
+        if (app.settings.value?.aiSummaries == true && category !in keptOnPhone && entries.size >= GroupSummaries.MIN_ITEMS) summaries.cached(summaryKey(category, day), entries) else null
+
+    /** Asks for fresh lines in the background; the drawer refreshes again when one arrives. */
+    private fun summarizeLater(later: List<Entry>, byDay: Boolean) {
+        if (app.summaryModel() == null) return
+        val now = System.currentTimeMillis()
+        val groups = if (byDay) drawerDays(later, Entry::postedAt, now, MAX_DAY_STACKS).flatMap { day ->
+            day.items.groupBy { Category.fromId(it.category) }.map { (c, list) -> Triple(summaryKey(c, day.title), c, list) }
+        } else later.groupBy { Category.fromId(it.category) }.map { (c, list) -> Triple(summaryKey(c, null), c, list) }
+        val stale = groups.filter { (key, c, list) -> c !in keptOnPhone && summaries.isStale(key, list) }
+        if (stale.isEmpty()) return
+        app.scope.launch {
+            val fresh = stale.map { (key, c, list) -> summaries.summarize(key, c.label, list) }
+            if (fresh.any { it }) requestRefresh()
+        }
     }
 
     private fun lineFor(e: Entry, showGroup: Boolean) =

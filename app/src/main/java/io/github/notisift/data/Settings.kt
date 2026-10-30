@@ -53,6 +53,14 @@ data class AppSettings(
     val categoryChoices: String = "",
     val digest: Boolean = true,
     val retentionDays: Int = 14,
+    /** Group chats without a choice: sale posts and busy days wait in Later, @mentions stay on top. */
+    val smartGroups: Boolean = true,
+    /** Hours waiting rows appear in the drawer, "9,18"; "" = as they arrive (see LaterSchedule). */
+    val laterTimes: String = "",
+    /** One AI-written line on each waiting group in the drawer. Off by default: it sends those notifications to the AI. */
+    val aiSummaries: Boolean = false,
+    /** Chats the user said "Not now" to when asked to quiet them, one key per line. */
+    val chatTipsSkipped: String = "",
 ) {
     val modelConfig: ModelConfig get() = ProviderDetector.resolve(provider, apiKey, baseUrl, model, BuildConfig.ENV_API_KEY_NAME)
 
@@ -73,6 +81,7 @@ data class AppSettings(
         categoryChoices = CategoryChoices.parse(categoryChoices),
         chatRules = ChatRules.parse(chatRules),
         myNames = myNames.split(',').map { it.trim() }.filter { it.isNotEmpty() },
+        smartGroups = smartGroups,
     )
 }
 
@@ -99,6 +108,10 @@ class SettingsStore(private val context: Context) {
         val categoryChoices = stringPreferencesKey("category_choices")
         val digest = booleanPreferencesKey("digest")
         val retention = intPreferencesKey("retention_days")
+        val smartGroups = booleanPreferencesKey("smart_groups")
+        val laterTimes = stringPreferencesKey("later_times")
+        val aiSummaries = booleanPreferencesKey("ai_summaries")
+        val chatTipsSkipped = stringPreferencesKey("chat_tips_skipped")
     }
 
     val flow: Flow<AppSettings> = context.store.data.map(::read)
@@ -127,6 +140,10 @@ class SettingsStore(private val context: Context) {
             categoryChoices = p[K.categoryChoices] ?: d.categoryChoices,
             digest = p[K.digest] ?: d.digest,
             retentionDays = p[K.retention] ?: d.retentionDays,
+            smartGroups = p[K.smartGroups] ?: d.smartGroups,
+            laterTimes = p[K.laterTimes] ?: d.laterTimes,
+            aiSummaries = p[K.aiSummaries] ?: d.aiSummaries,
+            chatTipsSkipped = p[K.chatTipsSkipped] ?: d.chatTipsSkipped,
         )
     }
 
@@ -154,6 +171,10 @@ class SettingsStore(private val context: Context) {
         p[K.categoryChoices] = s.categoryChoices.take(1000)
         p[K.digest] = s.digest
         p[K.retention] = s.retentionDays.coerceIn(AppSettings.RETENTION_DAYS)
+        p[K.smartGroups] = s.smartGroups
+        p[K.laterTimes] = io.github.notisift.engine.LaterSchedule.parse(s.laterTimes).joinToString(",")
+        p[K.aiSummaries] = s.aiSummaries
+        p[K.chatTipsSkipped] = s.chatTipsSkipped.take(20_000)
     }
 
     suspend fun update(transform: (AppSettings) -> AppSettings) {
