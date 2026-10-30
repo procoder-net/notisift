@@ -166,15 +166,24 @@ Your own builds are signed with the debug key unless you add a `keystore.propert
 ### 2. First run (about two minutes)
 
 <p align="center">
-  <img src="docs/screenshots/01-welcome-tour.png" width="220" alt="First-run tour, step 1">
-  <img src="docs/screenshots/06-tour-spotlight.png" width="220" alt="Tour spotlighting the three tiers">
-  <img src="docs/screenshots/09-help.png" width="220" alt="Help sheet over the app">
+  <img src="docs/screenshots/12-setup-welcome.png" width="220" alt="Setup: your drawer, sorted">
+  <img src="docs/screenshots/13-setup-access.png" width="220" alt="Setup: what notification access means, before Android's warning">
+  <img src="docs/screenshots/14-setup-preview.png" width="220" alt="Setup: your own drawer, sorted, before anything moves">
 </p>
 
-A 7-step guided tour runs the first time you open the app. The **?** button at the top opens Help over any
-screen, with a short explanation of every part and *Take the tour again*.
+The first time you open NotiSift, a four-step setup walks you through it:
 
-The status card on Home always shows the one next step:
+1. **Your drawer, sorted.** What NotiSift does, in one picture.
+2. **Allow access.** What NotiSift does and doesn't do with notification access, *before* Android shows its
+   warning. You come back to the next step automatically.
+3. **Your apps.** Every app gets a starting choice by itself; nothing to tap.
+4. **Your drawer, right now.** The notifications already in your drawer, sorted the way NotiSift would sort them,
+   with nothing moved yet. Tap **Start sorting**, or **Just watch for now** to keep your drawer as it is.
+
+Every step can be skipped. The **?** button at the top opens Help over any screen, with a short explanation of
+every part and a guided tour.
+
+If you skipped part of the setup, the status card on Home shows the one next step:
 
 1. **Allow access.** Enable NotiSift under *Notification access*. This is how it reads notifications.
 2. **Set up my apps.** A scan gives every installed app a starting choice. Most get 🤖 Smart; authenticator apps

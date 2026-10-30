@@ -133,6 +133,20 @@ class SiftListener : NotificationListenerService() {
     fun shadeCount(): Int = runCatching { activeNotifications }.getOrNull().orEmpty()
         .count { it.packageName != packageName && it.notification.flags and android.app.Notification.FLAG_GROUP_SUMMARY == 0 }
 
+    /**
+     * What NotiSift would do with everything in the drawer right now, without moving or logging anything: the
+     * first-run "here's your drawer, sorted" preview. Live and ongoing notifications are left out, as sorting would.
+     */
+    suspend fun preview(limit: Int = 40): List<Pair<NotificationInput, Verdict>> = withContext(Dispatchers.Default) {
+        val settings = app.awaitSettings()
+        runCatching { activeNotifications }.getOrNull().orEmpty()
+            .filter { it.packageName != packageName && !isNotiSift(it.packageName) && ownProfile(it) && it.isClearable && !isRunning(it) }
+            .map(::toInput).filter { !it.isGroupSummary && !it.isUnreadable }
+            .distinctBy { it.contentKey }.take(limit)
+            .map { input -> async { permits.withPermit { safely { app.engine.decide(input, settings.engine, checkDuplicates = false) }?.let { input to it } } } }
+            .awaitAll().filterNotNull()
+    }
+
     /** Applies current rules to everything already in the shade, even in observe mode. */
     suspend fun cleanNow(): Int = withContext(Dispatchers.Default) {
         val active = runCatching { activeNotifications }.getOrNull().orEmpty().filter { it.packageName != packageName && ownProfile(it) }
@@ -325,9 +339,10 @@ class SiftListener : NotificationListenerService() {
     }
 
     companion object {
-        /** Package of every NotiSift build (release, .debug, .demo): never sort NotiSift's own rows, from any copy. */
+        /** Package of every NotiSift build (release, debug and personal share it; demo adds .demo): never sort NotiSift's own rows. */
         const val BASE_PACKAGE = "io.github.notisift"
-        fun isNotiSift(pkg: String) = pkg == BASE_PACKAGE || pkg.startsWith("$BASE_PACKAGE.")
+        /** Exact ids only: the test sender (io.github.notisift.testsender) is an ordinary app to sort. */
+        fun isNotiSift(pkg: String) = pkg == BASE_PACKAGE || pkg == "$BASE_PACKAGE.demo"
 
         private const val RUNNING_SNOOZE_MS = 60 * 60 * 1000L
         private const val CANCEL_RACE_MS = 10_000L

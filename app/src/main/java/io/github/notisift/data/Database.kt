@@ -165,7 +165,7 @@ interface SiftDao {
     @Query("UPDATE entries SET action = :action, source = 'CORRECTION' WHERE id = :id") suspend fun correct(id: Long, action: String)
     @Query("DELETE FROM entries WHERE postedAt < :before") suspend fun prune(before: Long)
     /** Drops rows another NotiSift build posted (the demo's sample rows) that older versions sorted by mistake. */
-    @Query("DELETE FROM entries WHERE packageName = :base OR packageName LIKE :base || '.%'") suspend fun deleteFromNotiSift(base: String)
+    @Query("DELETE FROM entries WHERE packageName = :base OR packageName = :base || '.demo'") suspend fun deleteFromNotiSift(base: String)
 
     @Query("SELECT COUNT(*) FROM entries WHERE postedAt >= :since") fun countSince(since: Long): Flow<Int>
     @Query("SELECT COUNT(*) FROM entries WHERE postedAt >= :since AND action != 'keep'") fun removedSince(since: Long): Flow<Int>
