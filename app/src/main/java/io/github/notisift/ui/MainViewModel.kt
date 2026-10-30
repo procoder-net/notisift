@@ -50,6 +50,13 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.util.Calendar
 
+/** One notification in the first-run preview: who sent it and where NotiSift would put it. */
+data class PreviewRow(val app: String, val title: String, val text: String, val tier: Tier)
+
+data class ShadePreview(val rows: List<PreviewRow>) {
+    fun count(tier: Tier) = rows.count { it.tier == tier }
+}
+
 data class ScanState(
     val running: Boolean = false,
     val done: Int = 0,
@@ -365,6 +372,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             // The demo build posts nothing to the drawer, so it counts its sample Important items instead.
             _shadeCount.value = if (BuildConfig.DEMO) dao.entries().first().count { it.action == Action.KEEP.id } else app.digest.important.count()
         }
+    }
+
+    private val _preview = MutableStateFlow<ShadePreview?>(null)
+    /** First-run setup's look at the user's own drawer, sorted; null while loading. */
+    val preview: StateFlow<ShadePreview?> = _preview.asStateFlow()
+
+    fun loadPreview() = viewModelScope.launch {
+        _preview.value = null
+        val rows = SiftListener.instance?.preview().orEmpty()
+        _preview.value = ShadePreview(rows.map { (n, v) -> PreviewRow(n.appLabel, n.title.ifBlank { n.text }, n.text.takeIf { n.title.isNotBlank() }.orEmpty(), Tier.of(v.action)) })
     }
 
     fun cleanNow() = viewModelScope.launch {

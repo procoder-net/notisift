@@ -92,12 +92,17 @@ fun SiftRoot(requestedTier: String?, onTierShown: () -> Unit, vm: MainViewModel 
     val settings by vm.settings.collectAsState()
     var helpOpen by rememberSaveable { mutableStateOf(false) }
     var replayTour by rememberSaveable { mutableStateOf(false) }
-    val touring = replayTour || settings?.tourDone == false
+    // New users get the full-screen setup; the overlay tour is only replayed from Help.
+    val touring = replayTour
     val targets = remember { TourTargets() }
     // The tour explains Home, so it always starts there.
     LaunchedEffect(touring) { if (touring) tab = Tab.HOME }
 
     val wide = isWide()
+    if (settings?.tourDone == false) {
+        Onboarding(vm, onDone = { tab = Tab.HOME; vm.finishTour() })
+        return
+    }
     CompositionLocalProvider(LocalTourTargets provides targets) {
         Box(Modifier.fillMaxSize()) {
             Scaffold(
