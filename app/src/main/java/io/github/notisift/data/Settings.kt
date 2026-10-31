@@ -61,6 +61,8 @@ data class AppSettings(
     val aiSummaries: Boolean = false,
     /** Chats the user said "Not now" to when asked to quiet them, one key per line. */
     val chatTipsSkipped: String = "",
+    /** Home leads with the notifications: a one-line status, tiers pinned on scroll, slim tips. Off = the classic cards. */
+    val compactHome: Boolean = true,
 ) {
     val modelConfig: ModelConfig get() = ProviderDetector.resolve(provider, apiKey, baseUrl, model, BuildConfig.ENV_API_KEY_NAME)
 
@@ -112,6 +114,7 @@ class SettingsStore(private val context: Context) {
         val laterTimes = stringPreferencesKey("later_times")
         val aiSummaries = booleanPreferencesKey("ai_summaries")
         val chatTipsSkipped = stringPreferencesKey("chat_tips_skipped")
+        val compactHome = booleanPreferencesKey("compact_home")
     }
 
     val flow: Flow<AppSettings> = context.store.data.map(::read)
@@ -144,6 +147,7 @@ class SettingsStore(private val context: Context) {
             laterTimes = p[K.laterTimes] ?: d.laterTimes,
             aiSummaries = p[K.aiSummaries] ?: d.aiSummaries,
             chatTipsSkipped = p[K.chatTipsSkipped] ?: d.chatTipsSkipped,
+            compactHome = p[K.compactHome] ?: d.compactHome,
         )
     }
 
@@ -175,6 +179,7 @@ class SettingsStore(private val context: Context) {
         p[K.laterTimes] = io.github.notisift.engine.LaterSchedule.parse(s.laterTimes).joinToString(",")
         p[K.aiSummaries] = s.aiSummaries
         p[K.chatTipsSkipped] = s.chatTipsSkipped.take(20_000)
+        p[K.compactHome] = s.compactHome
     }
 
     suspend fun update(transform: (AppSettings) -> AppSettings) {

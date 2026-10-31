@@ -3,6 +3,7 @@ package io.github.notisift
 import android.app.Application
 import android.util.Log
 import io.github.notisift.data.AppSettings
+import io.github.notisift.data.HomeStatsStore
 import io.github.notisift.data.RoomEngineStore
 import io.github.notisift.data.SettingsStore
 import io.github.notisift.data.SiftDatabase
@@ -37,6 +38,7 @@ class SiftApp : Application() {
     val database by lazy { SiftDatabase.create(this) }
     val dao get() = database.dao()
     val settingsStore by lazy { SettingsStore(this) }
+    val homeStats by lazy { HomeStatsStore(this) }
     val engineStore by lazy { RoomEngineStore(dao) }
     val engine by lazy { DecisionEngine(engineStore, ::currentModel) }
     val digest by lazy { DigestNotifier(this) }

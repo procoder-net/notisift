@@ -44,6 +44,7 @@ android {
     compileSdk = 36
     defaultConfig {
         applicationId = "io.github.notisift"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         minSdk = 26
         targetSdk = 36
         versionCode = 2
@@ -94,6 +95,8 @@ android {
             matchingFallbacks += "debug"
         }
     }
+    // UI tests run on the demo app: it installs beside your own NotiSift, so testing never replaces it or its data.
+    testBuildType = "demo"
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -124,4 +127,10 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.mockwebserver)
     testImplementation(libs.coroutines.test)
+    androidTestImplementation(platform(libs.compose.bom))
+    androidTestImplementation(libs.compose.ui.test)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.junit)
+    debugImplementation(libs.compose.ui.test.manifest)
+    "demoImplementation"(libs.compose.ui.test.manifest)
 }

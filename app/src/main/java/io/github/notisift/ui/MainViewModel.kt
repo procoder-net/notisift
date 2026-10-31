@@ -8,6 +8,9 @@ import io.github.notisift.SiftApp
 import io.github.notisift.data.AppSettings
 import io.github.notisift.data.CachedDecision
 import io.github.notisift.data.Entry
+import io.github.notisift.data.HomeStats
+import io.github.notisift.data.HomeVariant
+import io.github.notisift.data.HomeVisits
 import io.github.notisift.data.Policy
 import io.github.notisift.engine.Action
 import io.github.notisift.engine.AppMode
@@ -97,6 +100,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val openCounts: StateFlow<Map<Tier, Int>> = dao.openCounts().map { rows -> rows.groupBy({ Tier.of(it.action) }, { it.total }).mapValues { it.value.sum() } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
     val clearedCount: StateFlow<Int> = dao.clearedCount().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+
+    /** Home visits and visits with an action, per layout: measured on this phone only (Settings → Advanced). */
+    val homeStats: StateFlow<Map<HomeVariant, HomeStats>> = app.homeStats.flow.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+    private val visits = HomeVisits()
+
+    /** Home came into view: a new visit, credited to the layout in use once settings have loaded. */
+    fun homeVisit() = viewModelScope.launch {
+        val variant = HomeVariant.of(app.awaitSettings().compactHome)
+        if (visits.start(variant)) app.homeStats.visit(variant)
+    }
+
+    /** Home went away (another tab, the app left); a rotation keeps the visit open. */
+    fun homeLeave() = visits.end()
+
+    /** Something on Home was opened, cleared or moved: counts once per visit, for the visit's layout. */
+    private fun homeActed() {
+        visits.act()?.let { v -> viewModelScope.launch { app.homeStats.act(v) } }
+    }
 
     fun showHome(view: String) = _home.update { if (it.view == view) it else it.copy(view = view, limit = HomeView.PAGE) }
     fun searchHome(query: String) = _home.update { it.copy(search = query.take(HomeView.MAX_SEARCH), limit = HomeView.PAGE) }
@@ -488,6 +509,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Done with it: it leaves NotiSift and, if it was showing in the drawer, the drawer too. */
     fun dismiss(entry: Entry) = viewModelScope.launch {
+        homeActed()
         val undo = clear(listOf(entry))
         _undo.value = UndoNotice("Done: ${entry.title.ifBlank { entry.appLabel }.take(40)}", undo)
     }
@@ -518,6 +540,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Opening a notification means it's been seen, so it leaves NotiSift as it would leave the shade. */
     fun open(entry: Entry) = viewModelScope.launch {
+        homeActed()
         if (app.digest.openOriginal(entry)) {
             dao.markOpened(listOf(entry.id))
             clear(listOf(entry))
@@ -527,6 +550,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** Clear on a group or day: exactly the items under that header, with Undo. */
     fun clearTier(entries: List<Entry>) = viewModelScope.launch {
         if (entries.isEmpty()) return@launch
+        homeActed()
         val undo = clear(entries)
         _undo.value = UndoNotice(clearedMessage(entries.size), undo)
     }
@@ -535,6 +559,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun clearAll(tier: Tier) = viewModelScope.launch {
         val all = dao.allIn(HomeView.actionsOf(tier))
         if (all.isEmpty()) return@launch
+        homeActed()
         val undo = clear(all)
         _undo.value = UndoNotice(clearedMessage(all.size), undo)
     }
@@ -544,6 +569,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     /** Puts cleared notifications back: on Home, and in the drawer for ones NotiSift was showing there. */
     fun restore(entries: List<Entry>) = viewModelScope.launch {
         if (entries.isEmpty()) return@launch
+        homeActed()
         val ids = entries.map { it.id }
         val shown = entries.filter { Tier.of(it.action) == Tier.IMPORTANT && it.applied }.distinctBy { it.key }
         dao.setDismissed(ids, false)
@@ -558,6 +584,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** "This mattered": keep this kind of notification from now on and put it back in the shade. Undo forgets the rule too. */
     fun markImportant(entry: Entry) = viewModelScope.launch {
+        homeActed()
         val undoRule = teach(entry, Action.KEEP)
         if (entry.applied) app.digest.important.restore(entry.copy(action = Action.KEEP.id))
         app.digest.requestRefresh()
@@ -570,6 +597,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     /** "This was noise": always block this kind of notification. Undo forgets the rule too. */
     fun markJunk(entry: Entry) = viewModelScope.launch {
+        homeActed()
         val wasShowing = Tier.of(entry.action) == Tier.IMPORTANT && entry.applied
         val undoRule = teach(entry, Action.BLOCK)
         if (wasShowing) app.digest.important.remove(entry.key)

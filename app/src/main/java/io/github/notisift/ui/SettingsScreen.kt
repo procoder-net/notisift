@@ -23,6 +23,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -45,9 +46,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.semantics.Role
 import io.github.notisift.BuildConfig
+import io.github.notisift.R
 import io.github.notisift.data.AppSettings
+import io.github.notisift.data.HomeStats
+import io.github.notisift.data.HomeVariant
 import io.github.notisift.engine.Action
 import io.github.notisift.engine.AppMode
 import io.github.notisift.engine.Category
@@ -249,6 +256,8 @@ private fun AdvancedSettings(vm: MainViewModel, s: AppSettings) {
     SwitchRow("Only important on top", "Anything the AI isn't sure about waits in Later", s.inboxMode) { on -> vm.updateSettings { it.copy(inboxMode = on) } }
     SwitchRow("Show waiting groups in the drawer", "Silent stacks: Promotions · 23, News · 12…", s.digest) { on -> vm.updateSettings { it.copy(digest = on) } }
     SwitchRow("Sort new apps automatically", "Apps you haven't set up are decided per notification", s.manageUnlistedApps) { on -> vm.updateSettings { it.copy(manageUnlistedApps = on) } }
+    SwitchRow(stringResource(R.string.settings_compact_home), stringResource(R.string.settings_compact_home_sub), s.compactHome) { on -> vm.updateSettings { it.copy(compactHome = on) } }
+    HomeStatsLine(vm)
 
     HorizontalDivider()
     Text("AI", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
@@ -324,14 +333,34 @@ private fun LaterTimes(current: String, onChange: (String) -> Unit) {
     }
 }
 
+/** How each Home layout is doing on this phone, so a switch back is an informed one. Nothing here is sent anywhere. */
+@Composable
+private fun HomeStatsLine(vm: MainViewModel) {
+    val stats by vm.homeStats.collectAsState()
+    val compact = stats[HomeVariant.COMPACT] ?: HomeStats()
+    val classic = stats[HomeVariant.CLASSIC] ?: HomeStats()
+    Text(
+        stringResource(
+            R.string.settings_home_stats,
+            pluralStringResource(R.plurals.home_visits, compact.visits, compact.visits), compact.actedPercent,
+            pluralStringResource(R.plurals.home_visits, classic.visits, classic.visits), classic.actedPercent,
+        ),
+        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
 @Composable
 private fun SwitchRow(title: String, subtitle: String, checked: Boolean, onChange: (Boolean) -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
+    // The whole row flips the switch, so the label is a 48dp target too and TalkBack reads it as one switch.
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = 48.dp).toggleable(value = checked, role = Role.Switch, onValueChange = onChange),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         Column(Modifier.weight(1f)) {
             Text(title)
             Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Switch(checked, onChange)
+        Switch(checked, onCheckedChange = null)
     }
 }
 

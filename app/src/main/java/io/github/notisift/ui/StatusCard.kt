@@ -44,13 +44,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
+import io.github.notisift.R
 
-/** The one thing the user needs to know: is my shade being cleaned, and what do I do if not. */
+/**
+ * The one thing the user needs to know: is my shade being cleaned, and what do I do if not. [compact] shrinks the
+ * all-is-well state to one line; every state that needs the user keeps the full card.
+ */
 @Composable
-fun StatusCard(vm: MainViewModel) {
+fun StatusCard(vm: MainViewModel, compact: Boolean = false) {
     val context = LocalContext.current
     val settings by vm.settings.collectAsState()
     val connected by vm.listenerConnected.collectAsState()
@@ -128,6 +133,12 @@ fun StatusCard(vm: MainViewModel) {
             }) { Text("Fix in Android settings") }
             TextButton(onClick = { vm.setActive(false) }) { Text("Preview only") }
         }
+        compact -> CompactStatus(
+            onTop = inShade, movedToday = removed,
+            where = vm.cloudProvider()?.let { stringResource(R.string.home_status_where_ai, it) } ?: stringResource(R.string.home_status_where_rules),
+            onClean = { vm.cleanNow() },
+            more = listOf(stringResource(R.string.home_preview_only) to { vm.setActive(false) }, stringResource(R.string.home_turn_off) to { vm.setStopped(true) }),
+        )
         else -> Status(
             Icons.Outlined.CheckCircle, "Sorting",
             "⭐ $inShade important on top · $removed moved here today. $where.",
@@ -157,9 +168,9 @@ private fun Status(icon: ImageVector, title: String, body: String, color: androi
 }
 
 @Composable
-private fun MoreMenu(items: List<Pair<String, () -> Unit>>) {
+internal fun MoreMenu(items: List<Pair<String, () -> Unit>>) {
     var open by remember { mutableStateOf(false) }
-    IconButton(onClick = { open = true }) { Icon(Icons.Outlined.MoreVert, "More choices") }
+    IconButton(onClick = { open = true }) { Icon(Icons.Outlined.MoreVert, stringResource(R.string.home_more_choices)) }
     DropdownMenu(open, onDismissRequest = { open = false }) {
         items.forEach { (label, action) -> DropdownMenuItem(text = { Text(label) }, onClick = { open = false; action() }) }
     }

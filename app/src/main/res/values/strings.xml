@@ -1,4 +1,30 @@
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
     <string name="app_name">NotiSift</string>
     <string name="listener_label">NotiSift notification organiser</string>
+
+    <!-- Compact Home -->
+    <string name="home_status_sorting">Sorting</string>
+    <!-- "N on top · N moved today" reads right for any N, so no plural forms are needed. -->
+    <string name="home_status_summary" tools:ignore="PluralsCandidate">⭐ %1$d on top · %2$d moved today</string>
+    <!-- What TalkBack reads for the line above, without the ⭐ ("star"). -->
+    <string name="home_status_summary_spoken" tools:ignore="PluralsCandidate">%1$d on top, %2$d moved today</string>
+    <string name="home_status_where_ai">Using %1$s</string>
+    <string name="home_status_where_rules">Built-in rules, on this phone</string>
+    <string name="home_clean_again">Clean again</string>
+    <string name="home_more_choices">More choices</string>
+    <string name="home_preview_only">Preview only</string>
+    <string name="home_turn_off">Turn off</string>
+    <string name="home_ai_banner">🤖 Sort smarter with a free AI key</string>
+    <string name="home_ai_add">Add key</string>
+    <string name="home_ai_not_now">Not now</string>
+    <string name="home_by_day">By day</string>
+
+    <!-- Settings -->
+    <string name="settings_compact_home">Compact Home</string>
+    <string name="settings_compact_home_sub">Notifications first: a one-line status, tiers that stay at the top, slim tips. Off = the classic cards.</string>
+    <string name="settings_home_stats">On this phone only: compact Home %1$s, %2$d%% with an action · classic %3$s, %4$d%%</string>
+    <plurals name="home_visits">
+        <item quantity="one">%d visit</item>
+        <item quantity="other">%d visits</item>
+    </plurals>
 </resources>
