@@ -43,7 +43,7 @@ class DigestNotifier(private val context: Context) {
     private var pending: Job? = null
     private val pacer = Pacer()
     val important = ImportantStack(context, manager, pacer) { open(Tier.LATER, null) }
-    private val summaries = GroupSummaries({ request -> app.summaryModel()?.completeJson(request) })
+    private val summaries = GroupSummaries({ request -> app.summarizer()?.invoke(request) })
 
     init {
         // Older builds had per-tier digest and junk channels; one quiet line replaces them.
@@ -236,11 +236,11 @@ class DigestNotifier(private val context: Context) {
     private fun summaryKey(category: Category, day: String?) = "${day.orEmpty()}|${category.id}"
 
     private fun aiLine(category: Category, entries: List<Entry>, day: String? = null): String? =
-        if (app.settings.value?.aiSummaries == true && category !in keptOnPhone && entries.size >= GroupSummaries.MIN_ITEMS) summaries.cached(summaryKey(category, day), entries) else null
+        if (app.settings.value?.let { it.aiSummaries || it.onDeviceAi } == true && category !in keptOnPhone && entries.size >= GroupSummaries.MIN_ITEMS) summaries.cached(summaryKey(category, day), entries) else null
 
     /** Asks for fresh lines in the background; the drawer refreshes again when one arrives. */
     private fun summarizeLater(later: List<Entry>, byDay: Boolean) {
-        if (app.summaryModel() == null) return
+        if (app.summarizer() == null) return
         val now = System.currentTimeMillis()
         val groups = if (byDay) drawerDays(later, Entry::postedAt, now, MAX_DAY_STACKS).flatMap { day ->
             day.items.groupBy { Category.fromId(it.category) }.map { (c, list) -> Triple(summaryKey(c, day.title), c, list) }

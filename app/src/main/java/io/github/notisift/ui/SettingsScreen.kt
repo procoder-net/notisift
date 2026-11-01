@@ -57,6 +57,7 @@ import io.github.notisift.engine.DecisionEngine
 import io.github.notisift.engine.KeywordRule
 import io.github.notisift.engine.LaterSchedule
 import io.github.notisift.engine.Tier
+import io.github.notisift.llm.NanoStatus
 import io.github.notisift.llm.ProviderDetector
 import io.github.notisift.llm.ProviderKind
 
@@ -68,6 +69,7 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier) {
     val suggestions by vm.ruleSuggestions.collectAsState()
     val groups by vm.groups.collectAsState()
     val policies by vm.policies.collectAsState()
+    val onPhoneSummaries = s.onDeviceAi && vm.onPhoneAi.collectAsState().value == NanoStatus.READY
     val fixed = policies.filter { AppMode.fromId(it.mode).let { m -> m != null && m != AppMode.AUTO && m != AppMode.UNMANAGED } }
 
     Column(modifier.verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -103,10 +105,12 @@ fun SettingsScreen(vm: MainViewModel, modifier: Modifier) {
             LaterTimes(s.laterTimes) { times -> vm.updateSettings { it.copy(laterTimes = times) } }
             SwitchRow(
                 "AI summary on waiting groups",
-                if (vm.cloudProvider() == null) "Needs an AI key (Advanced). One line per group, e.g. \"40 sale posts, nothing for you\""
+                if (onPhoneSummaries) "The phone's own AI writes these while NotiSift is open. On = also ${vm.cloudProvider() ?: "your AI key"} when it's closed"
+                else if (vm.cloudProvider() == null) "Needs an AI key (Advanced). One line per group, e.g. \"40 sale posts, nothing for you\""
                 else "Sends waiting notifications (never codes or money) to ${vm.cloudProvider()} for one line per group",
                 s.aiSummaries,
             ) { on -> vm.updateSettings { it.copy(aiSummaries = on) } }
+            OnPhoneAiRow(vm, s.onDeviceAi)
         }
 
         if (suggestions.isNotEmpty()) Section("Make it a rule") {
@@ -322,6 +326,22 @@ private fun LaterTimes(current: String, onChange: (String) -> Unit) {
             FilterChip(selected = current == value, onClick = { onChange(value) }, label = { Text(label) })
         }
     }
+}
+
+/** The phone's own AI: on by default where the phone has it; elsewhere it says so and nothing changes. */
+@Composable
+private fun OnPhoneAiRow(vm: MainViewModel, on: Boolean) {
+    val status by vm.onPhoneAi.collectAsState()
+    val learned by vm.learnedOnPhone.collectAsState()
+    val subtitle = when {
+        !on -> "Off. Summaries and sorting use your AI key or the built-in rules"
+        status == NanoStatus.READY -> "Ready. While NotiSift is open it writes the group summaries and learns from what the rules sorted. " +
+            "Nothing leaves the phone" + if (learned > 0) ". Learned $learned kinds of notification so far" else ""
+        status == NanoStatus.DOWNLOADING -> "Getting the phone's AI ready (a one-time download)…"
+        status == NanoStatus.CHECKING -> "Checking this phone…"
+        else -> "This phone doesn't have it. NotiSift uses your AI key or the built-in rules"
+    }
+    SwitchRow("On-phone AI (Gemini Nano)", subtitle, on) { v -> vm.setOnPhoneAi(v) }
 }
 
 @Composable

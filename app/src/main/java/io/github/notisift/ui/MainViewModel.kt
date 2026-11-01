@@ -354,6 +354,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun requestAiSetup() { openAiSetup = true }
     fun takeAiSetupRequest(): Boolean = openAiSetup.also { openAiSetup = false }
 
+    /** The phone's own AI (Gemini Nano): whether it's there, and what it has taught NotiSift since the app started. */
+    val onPhoneAi = app.nano.status
+    val learnedOnPhone = app.learnedOnPhone
+
+    fun setOnPhoneAi(on: Boolean) = viewModelScope.launch {
+        try {
+            app.settingsStore.update { it.copy(onDeviceAi = on) }
+            if (on) app.checkOnPhoneAi(justTurnedOn = true)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            _toast.value = "Couldn't save settings: ${e.message ?: e.javaClass.simpleName}"
+        }
+    }
+
     fun cloudProvider(): String? = app.currentModel()?.let { app.settings.value?.modelConfig?.kind?.label }
 
     /** False when Android would hide NotiSift's own rows, so the drawer can't show what it moved. */

@@ -120,6 +120,7 @@ dependencies {
     ksp(libs.room.compiler)
     implementation(libs.datastore)
     implementation(libs.okhttp)
+    implementation(libs.genai.prompt)
     implementation(libs.serialization)
     testImplementation(libs.junit)
     testImplementation(libs.mockwebserver)
