@@ -129,6 +129,14 @@ interface SiftDao {
     @Query("SELECT * FROM entries WHERE source IN (:sources) AND postedAt >= :since ORDER BY postedAt DESC LIMIT :limit")
     suspend fun sortedBySince(sources: List<String>, since: Long, limit: Int): List<Entry>
 
+    /** Today's Later notifications still waiting in the drawer, newest first: what "Important on top" looks at. */
+    @Query("SELECT * FROM entries WHERE dismissed = 0 AND action = 'bundle' AND applied = 1 AND postedAt >= :since ORDER BY postedAt DESC LIMIT 200")
+    suspend fun laterSince(since: Long): List<Entry>
+    @Query("SELECT id FROM entries WHERE id IN (:ids) AND action = 'bundle' AND dismissed = 0") suspend fun stillWaiting(ids: List<Long>): List<Long>
+    /** Search for "Talk to NotiSift": like [search], once, and including notifications already cleared ("what was that code?"). */
+    @Query("SELECT * FROM entries WHERE (title LIKE :pattern ESCAPE '\\' OR text LIKE :pattern ESCAPE '\\' OR appLabel LIKE :pattern ESCAPE '\\') ORDER BY postedAt DESC LIMIT :limit")
+    suspend fun searchNow(pattern: String, limit: Int): List<Entry>
+
     @Query("SELECT * FROM entries WHERE action != 'keep' AND applied = 1 AND dismissed = 0 AND postedAt >= :since ORDER BY postedAt DESC")
     suspend fun removedEntriesSince(since: Long): List<Entry>
 
@@ -191,6 +199,7 @@ interface SiftDao {
     suspend fun sampleTitles(since: Long): List<SampleTitle>
 
     @Upsert suspend fun upsertPolicy(policy: Policy)
+    @Query("DELETE FROM policies WHERE packageName = :packageName") suspend fun deletePolicy(packageName: String)
     @Upsert suspend fun upsertPolicies(policies: List<Policy>)
     @Query("SELECT * FROM policies WHERE packageName = :pkg") suspend fun policy(pkg: String): Policy?
     @Query("SELECT * FROM policies ORDER BY label COLLATE NOCASE") fun policies(): Flow<List<Policy>>

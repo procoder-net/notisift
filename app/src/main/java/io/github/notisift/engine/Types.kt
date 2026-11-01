@@ -135,7 +135,7 @@ enum class Source(val label: String) {
     PROTECTED("Protected"), OTP("Code detected"), KEYWORD("Your keyword rule"), APP_POLICY("App policy"),
     DUPLICATE("Duplicate"), CORRECTION("Your correction"), CACHE("Learned"), MODEL("AI model"),
     HEURISTIC("Offline rules"), FALLBACK("Kept: uncertain"), INBOX("Inbox: not important"), GROUP("Your group choice"),
-    CHAT("Your chat choice"), SMART_GROUP("Smart group chats"),
+    CHAT("Your chat choice"), SMART_GROUP("Smart group chats"), RESCUED("Moved up by on-phone AI"),
 }
 
 /** Android-free snapshot of a posted notification. */

@@ -106,6 +106,7 @@ fun HomeScreen(vm: MainViewModel, modifier: Modifier, tier: String, onTier: (Str
     val quieted by vm.quietedGroups.collectAsState()
     var quietedSeen by rememberSaveable { mutableStateOf(false) }
     val ignored by vm.ignoredGroups.collectAsState()
+    val movedUp by vm.movedUp.collectAsState()
     var confirmClear by remember { mutableStateOf<Tier?>(null) }
     var confirmRestore by remember { mutableStateOf<List<Entry>?>(null) }
     val listState = rememberLazyListState()
@@ -124,6 +125,10 @@ fun HomeScreen(vm: MainViewModel, modifier: Modifier, tier: String, onTier: (Str
 
     val header: LazyListScope.() -> Unit = {
         item(key = "status") { Box(Modifier.tourTarget("status")) { StatusCard(vm, compact) } }
+        if (settings?.stopped == false && !view.searching) item(key = "ask") { AskCard(vm) }
+        if (movedUp.isNotEmpty()) item(key = "moved-up") {
+            MovedUpCard(movedUp, onUndo = { vm.moveBackDown(movedUp) }, onOk = { vm.dismissMovedUp(movedUp) })
+        }
         // Tiers scroll on their own row so big counts and large text never squeeze them; Clear all sits below.
         // Compact Home pins them, so switching tiers never means scrolling back up.
         val tierBar: @Composable () -> Unit = {

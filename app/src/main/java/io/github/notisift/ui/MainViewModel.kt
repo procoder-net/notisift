@@ -1,5 +1,12 @@
 package io.github.notisift.ui
 
+import android.util.Log
+import io.github.notisift.engine.KeywordRule
+import io.github.notisift.engine.Proposal
+import io.github.notisift.engine.ChatRef
+import io.github.notisift.engine.AssistantReply
+import io.github.notisift.engine.Assistant
+import io.github.notisift.engine.AppRef
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -249,6 +256,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
      * the ⭐ stack now, not just from the next message. One Undo puts the choice and every moved item back.
      */
     private fun applyChatMode(chats: List<Pair<String, String>>, mode: ChatMode?) = viewModelScope.launch {
+        _undo.value = chatModeNow(chats, mode)
+    }
+
+    /** Does the work of [applyChatMode] and returns its undo, so "Talk to NotiSift" can fold it into one. */
+    private suspend fun chatModeNow(chats: List<Pair<String, String>>, mode: ChatMode?): UndoNotice {
         val before = app.awaitSettings()
         app.settingsStore.update { it.copy(chatRules = ChatRules.format(ChatRules.with(ChatRules.rows(it.chatRules), chats, mode))) }
         val keys = chats.map { (pkg, title) -> ChatRules.key(pkg, title) }.toSet()
@@ -271,11 +283,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             ChatMode.MENTIONS -> "$what: only when you're mentioned" + if (moved.isNotEmpty()) " · ${moved.size} moved to Later" else ""
             ChatMode.MUTE -> "$what: muted" + if (moved.isNotEmpty()) " · ${moved.size} moved to Later" else ""
         }
-        _undo.value = UndoNotice(message) {
+        return UndoNotice(message) {
             app.settingsStore.update { it.copy(chatRules = before.chatRules) }
             moved.forEach { dao.restoreDecision(it.id, it.action, it.source) }
             moved.filter { it.applied }.distinctBy { it.key }.forEach { app.digest.important.restore(it) }
             app.digest.requestRefresh()
+            refreshShadeCount()
         }
     }
 
@@ -389,6 +402,90 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             _toast.value = "Couldn't save settings: ${e.message ?: e.javaClass.simpleName}"
         }
     }
+
+    /** "Talk to NotiSift": idle, thinking, or the reply to what the user typed, with who answered it. */
+    sealed interface AskState {
+        data object Idle : AskState
+        data object Thinking : AskState
+        data class Done(val message: String, val reply: AssistantReply, val by: String) : AskState
+    }
+
+    private val _ask = MutableStateFlow<AskState>(AskState.Idle)
+    val ask = _ask.asStateFlow()
+
+    fun ask(message: String) = viewModelScope.launch {
+        if (message.isBlank()) return@launch
+        val idle = _ask.value
+        if (idle == AskState.Thinking || !_ask.compareAndSet(idle, AskState.Thinking)) return@launch
+        val model = app.assistantModel()
+        val assistant = Assistant(model?.first, onPhone = model?.second ?: true)
+        val reply = try {
+            val recent = dao.entries().first()
+            val apps = (dao.policies().first().map { AppRef(it.packageName, it.label) } + recent.map { AppRef(it.packageName, it.appLabel) })
+                .filter { it.label.isNotBlank() }.distinctBy { it.packageName }
+            val chats = recent.filter { it.category == Category.PERSONAL.id && it.title.isNotBlank() }
+                .sortedByDescending { it.postedAt }.map { ChatRef(it.packageName, it.appLabel, it.title) }.distinct()
+            assistant.handle(message, apps, chats) { word -> dao.searchNow(HomeView.likePattern(word), ASK_SEARCH_LIMIT) }
+        } catch (e: CancellationException) {
+            _ask.value = AskState.Idle
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "Talk to NotiSift failed: ${e.javaClass.simpleName}")
+            AssistantReply.Unclear("Something went wrong. Try again in a moment.")
+        }
+        val by = when {
+            model == null || assistant.fellBack -> "built-in rules"
+            model.second -> "On-phone AI"
+            else -> cloudProvider() ?: "your AI model"
+        }
+        _ask.value = AskState.Done(message, reply, by)
+    }
+
+    fun clearAsk() { _ask.value = AskState.Idle }
+
+    /** Applies the rule cards the user confirmed, with one undo for all of them. */
+    fun applyProposals(proposals: List<Proposal>) = viewModelScope.launch {
+        if (_ask.value !is AskState.Done) return@launch // a second tap on Add
+        clearAsk()
+        val before = app.awaitSettings()
+        val oldPolicies = proposals.filterIsInstance<Proposal.App>().map { it.packageName to dao.policy(it.packageName) }
+        val chatUndos = mutableListOf<suspend () -> Unit>()
+        proposals.forEach { p ->
+            when (p) {
+                is Proposal.App -> setModeNow(p.packageName, p.label, p.mode)
+                is Proposal.Chat -> chatUndos += chatModeNow(listOf(p.packageName to p.chat), p.mode).undo
+                is Proposal.Keyword -> app.settingsStore.update { s ->
+                    val rules = KeywordRule.parse(s.keywordRules).filter { it.keyword != p.rule.keyword } + p.rule
+                    s.copy(keywordRules = rules.joinToString("\n") { "${it.keyword} => ${it.action.id}" })
+                }
+                is Proposal.Group -> app.settingsStore.update { s ->
+                    s.copy(categoryChoices = CategoryChoices.format(CategoryChoices.parse(s.categoryChoices) + (p.category to p.choice)))
+                }
+            }
+        }
+        val keywords = proposals.any { it is Proposal.Keyword }
+        val groupsChanged = proposals.any { it is Proposal.Group }
+        app.digest.requestRefresh()
+        _undo.value = UndoNotice(if (proposals.size == 1) "Rule added" else "${proposals.size} rules added") {
+            // Only what this added is put back, so a setting changed since then is kept.
+            chatUndos.asReversed().forEach { it() }
+            if (keywords || groupsChanged) app.settingsStore.update {
+                it.copy(
+                    keywordRules = if (keywords) before.keywordRules else it.keywordRules,
+                    categoryChoices = if (groupsChanged) before.categoryChoices else it.categoryChoices,
+                )
+            }
+            oldPolicies.forEach { (pkg, old) -> if (old != null) dao.upsertPolicy(old) else dao.deletePolicy(pkg) }
+            app.digest.requestRefresh()
+        }
+    }
+
+    /** What the on-phone AI moved up from Later this time, and putting it back. */
+    val movedUp = app.movedUp
+
+    fun moveBackDown(entries: List<Entry>) = viewModelScope.launch { app.moveBackDown(entries) }
+
+    fun dismissMovedUp(handled: List<Entry>) = app.dismissMovedUp(handled)
 
     fun cloudProvider(): String? = app.currentModel()?.let { app.settings.value?.modelConfig?.kind?.label }
 
@@ -641,3 +738,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
     }.timeInMillis
 }
+
+private const val ASK_SEARCH_LIMIT = 30
+private const val TAG = "NotiSift"

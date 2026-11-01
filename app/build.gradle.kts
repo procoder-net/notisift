@@ -47,8 +47,8 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         minSdk = 26
         targetSdk = 36
-        versionCode = 3
-        versionName = "0.1.2"
+        versionCode = 4
+        versionName = "0.1.3"
         buildConfigField("String", "ENV_PROVIDER", quoted(envValue("SIFT_PROVIDER").second))
         buildConfigField("String", "ENV_BASE_URL", quoted(envValue("SIFT_BASE_URL").second))
         buildConfigField("String", "ENV_MODEL", quoted(envValue("SIFT_MODEL").second))

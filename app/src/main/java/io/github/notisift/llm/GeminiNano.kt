@@ -117,7 +117,15 @@ class GeminiNano(private val scope: CoroutineScope) {
             topK = 10
             maxOutputTokens = maxTokens.coerceAtMost(MAX_OUTPUT)
         }
-        return calls.withLock { c.generateContent(request) }.candidates.firstOrNull()?.text.orEmpty()
+        return try {
+            calls.withLock { c.generateContent(request) }.candidates.firstOrNull()?.text.orEmpty()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // Why Android turned it down (in the background, busy, over quota, prompt too long), without any text.
+            Log.i(TAG, "On-phone AI request failed: ${e.javaClass.simpleName} ${(e as? GenAiException)?.errorCode ?: ""} (${system.length + user.length} chars)")
+            throw e
+        }
     }
 
     companion object {
