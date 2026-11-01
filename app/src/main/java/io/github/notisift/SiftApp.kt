@@ -6,9 +6,15 @@ import io.github.notisift.data.AppSettings
 import io.github.notisift.data.RoomEngineStore
 import io.github.notisift.data.SettingsStore
 import io.github.notisift.data.SiftDatabase
+import io.github.notisift.engine.Category
 import io.github.notisift.engine.DecisionEngine
+import io.github.notisift.engine.NotificationInput
+import io.github.notisift.engine.OnPhoneTidy
 import io.github.notisift.llm.DecisionModel
 import io.github.notisift.llm.BatchingModel
+import io.github.notisift.llm.GeminiNano
+import io.github.notisift.llm.JsonRequest
+import io.github.notisift.llm.NanoStatus
 import io.github.notisift.llm.LlmClient
 import io.github.notisift.llm.ModelConfig
 import io.github.notisift.service.DigestNotifier
@@ -18,7 +24,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.serialization.json.JsonObject
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
@@ -40,6 +49,16 @@ class SiftApp : Application() {
     val engineStore by lazy { RoomEngineStore(dao) }
     val engine by lazy { DecisionEngine(engineStore, ::currentModel) }
     val digest by lazy { DigestNotifier(this) }
+    val nano by lazy { GeminiNano() }
+    private val tidy by lazy { OnPhoneTidy(engine) }
+
+    /** NotiSift is on screen: the only time Android lets the phone's own AI answer. */
+    @Volatile private var onScreen = false
+    private var lastTidy = 0L
+    private val _learnedOnPhone = MutableStateFlow(0)
+
+    /** Kinds of notification the on-phone AI taught NotiSift since the app started. */
+    val learnedOnPhone: StateFlow<Int> = _learnedOnPhone.asStateFlow()
 
     lateinit var settings: StateFlow<AppSettings?>
         private set
@@ -76,6 +95,62 @@ class SiftApp : Application() {
         return runCatching { BatchingModel(LlmClient(config)) }.getOrNull()?.also { client = config to it }
     }
 
+    /**
+     * NotiSift came on screen. On phones with their own AI it writes the waiting groups' summaries and takes a
+     * second look at what the offline rules sorted; anything else keeps using the AI key or the rules.
+     */
+    fun onShown() {
+        onScreen = true
+        checkOnPhoneAi()
+    }
+
+    /**
+     * Also run when the user turns the on-phone AI on ([justTurnedOn]: the saved setting may not have reached
+     * [settings] yet), so it starts without leaving the app.
+     */
+    fun checkOnPhoneAi(justTurnedOn: Boolean = false) {
+        if (BuildConfig.DEMO) return
+        scope.launch {
+            val s = awaitSettings().let { if (justTurnedOn) it.copy(onDeviceAi = true) else it }
+            if (!s.onDeviceAi || s.stopped) return@launch
+            nano.refresh(allowDownload = true)
+            if (nano.status.value != NanoStatus.READY) return@launch
+            digest.requestRefresh()
+            if (!claimTidy()) return@launch
+            val sources = OnPhoneTidy.guessed(hasCloudModel = currentModel() != null).map { it.name }
+            val recent = dao.sortedBySince(sources, System.currentTimeMillis() - TIDY_LOOKBACK_MS, limit = 200)
+                .filter { OnPhoneTidy.worthAsking(Category.fromId(it.category)) }
+                .map { e -> NotificationInput(e.key, e.packageName, e.appLabel, e.channelId, title = e.title, text = e.text, postedAt = e.postedAt) }
+            val learned = tidy.run(recent, s.engine, nano.model)
+            if (learned > 0) _learnedOnPhone.value += learned
+        }
+    }
+
+    /** At most one second look every [TIDY_EVERY_MS], however often the app is opened. */
+    @Synchronized
+    private fun claimTidy(): Boolean {
+        val now = System.currentTimeMillis()
+        if (now - lastTidy < TIDY_EVERY_MS) return false
+        lastTidy = now
+        return true
+    }
+
+    fun onHidden() {
+        onScreen = false
+    }
+
+    /** True when the phone's own AI is on and can answer right now. */
+    fun onPhoneAiReady(): Boolean = onScreen && settings.value?.onDeviceAi == true && nano.status.value == NanoStatus.READY
+
+    /**
+     * Who writes the drawer's one-line group summaries: the phone's own AI while NotiSift is open, otherwise the
+     * user's AI key if they turned cloud summaries on, otherwise nobody.
+     */
+    fun summarizer(): (suspend (JsonRequest) -> JsonObject)? {
+        if (onPhoneAiReady()) return nano.model::completeJson
+        return summaryModel()?.let { it::completeJson }
+    }
+
     @Volatile private var summaryClient: Pair<ModelConfig, LlmClient>? = null
 
     /** The model for drawer summaries: only when AI is on, configured, and the user turned summaries on. */
@@ -91,5 +166,7 @@ class SiftApp : Application() {
     companion object {
         const val DAY_MS = 24L * 60 * 60 * 1000
         private const val PRUNE_EVERY_MS = 6L * 60 * 60 * 1000
+        private const val TIDY_EVERY_MS = 10L * 60 * 1000
+        private const val TIDY_LOOKBACK_MS = 2 * DAY_MS
     }
 }

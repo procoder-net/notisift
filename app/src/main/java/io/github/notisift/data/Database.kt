@@ -125,6 +125,10 @@ interface SiftDao {
     /** Group messages NotiSift quieted on its own today and nobody has handled yet. */
     @Query("SELECT * FROM entries WHERE source = 'SMART_GROUP' AND dismissed = 0 AND postedAt >= :since ORDER BY postedAt DESC")
     fun smartQuieted(since: Long): Flow<List<Entry>>
+    /** Recent notifications sorted with [sources] (Source names), newest first: the on-phone AI's second look. */
+    @Query("SELECT * FROM entries WHERE source IN (:sources) AND postedAt >= :since ORDER BY postedAt DESC LIMIT :limit")
+    suspend fun sortedBySince(sources: List<String>, since: Long, limit: Int): List<Entry>
+
     @Query("SELECT * FROM entries WHERE action != 'keep' AND applied = 1 AND dismissed = 0 AND postedAt >= :since ORDER BY postedAt DESC")
     suspend fun removedEntriesSince(since: Long): List<Entry>
 
