@@ -9,6 +9,9 @@ import com.google.mlkit.genai.prompt.GenerativeModel
 import com.google.mlkit.genai.prompt.TextPart
 import com.google.mlkit.genai.prompt.generateContentRequest
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -23,7 +26,7 @@ enum class NanoStatus { CHECKING, READY, DOWNLOADING, UNAVAILABLE }
  * Gemini Nano through ML Kit (Android AICore). Phones without it (older ones, emulators, no Google Play services)
  * report [NanoStatus.UNAVAILABLE] and NotiSift keeps using the user's AI key or the built-in rules.
  */
-class GeminiNano {
+class GeminiNano(private val scope: CoroutineScope) {
     private val _status = MutableStateFlow(NanoStatus.CHECKING)
     val status: StateFlow<NanoStatus> = _status.asStateFlow()
 
@@ -39,14 +42,16 @@ class GeminiNano {
         }
     }
     private val lock = Mutex()
+    @Volatile private var downloading: Job? = null
     /** AICore answers one request at a time per app; overlapping calls (summaries and the second look) wait. */
     private val calls = Mutex()
 
     val model = OnPhoneModel(::generate)
 
     /**
-     * Checks the model and, when the phone offers it, downloads it (once, over the network AICore picks). A check
-     * already running (or a download in progress) makes this a no-op.
+     * Checks the model and, when the phone offers it, starts its download (once, over the network AICore picks).
+     * Every call checks again, even while a download is being waited on, so the status never sticks at
+     * "downloading" once the model is there. A check already running makes this a no-op.
      */
     suspend fun refresh(allowDownload: Boolean) {
         val c = client ?: return set(NanoStatus.UNAVAILABLE)
@@ -55,7 +60,7 @@ class GeminiNano {
             when (c.checkStatus()) {
                 FeatureStatus.AVAILABLE -> set(NanoStatus.READY)
                 FeatureStatus.DOWNLOADING -> set(NanoStatus.DOWNLOADING)
-                FeatureStatus.DOWNLOADABLE -> if (allowDownload) download(c) else set(NanoStatus.UNAVAILABLE)
+                FeatureStatus.DOWNLOADABLE -> if (allowDownload) startDownload(c) else set(NanoStatus.UNAVAILABLE)
                 else -> set(NanoStatus.UNAVAILABLE)
             }
         } catch (e: CancellationException) {
@@ -68,10 +73,22 @@ class GeminiNano {
         }
     }
 
-    /** Gives up waiting after [DOWNLOAD_WAIT_MS]; AICore keeps downloading and the next check sees how it went. */
-    private suspend fun download(c: GenerativeModel) {
+    /**
+     * Runs outside [lock] so later checks still happen. Gives up waiting after [DOWNLOAD_WAIT_MS]; AICore keeps
+     * downloading (it often waits for wifi and charging) and the next check sees how it went.
+     */
+    private fun startDownload(c: GenerativeModel) {
         set(NanoStatus.DOWNLOADING)
-        withTimeoutOrNull(DOWNLOAD_WAIT_MS) { collectDownload(c) }
+        if (downloading?.isActive == true) return
+        downloading = scope.launch {
+            try {
+                withTimeoutOrNull(DOWNLOAD_WAIT_MS) { collectDownload(c) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.i(TAG, "On-phone AI download stopped: ${e.javaClass.simpleName} ${(e as? GenAiException)?.errorCode ?: ""}")
+            }
+        }
     }
 
     private suspend fun collectDownload(c: GenerativeModel) {
@@ -88,6 +105,7 @@ class GeminiNano {
     }
 
     private fun set(s: NanoStatus) {
+        if (_status.value != s) Log.i(TAG, "On-phone AI: $s")
         _status.value = s
     }
 

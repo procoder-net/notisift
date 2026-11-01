@@ -97,8 +97,10 @@ so the Later pile stays readable instead of being one long list.
   only when you're mentioned. It asks; it never does it on its own.
 - **Later at set times.** Have waiting groups appear in the drawer at, say, 9 am and 6 pm instead of all day
   (*Settings → Groups*). Everything is always in the app.
-- **Optional AI summaries.** With an AI key, each waiting group can carry one line such as "40 sale posts, nothing for
-  you", so you can clear it without reading. Off by default.
+- **On-phone AI (Gemini Nano).** On phones that have it, NotiSift uses Google's on-phone AI with no key and nothing
+  leaving the phone: one line on each waiting group ("40 sale posts, nothing for you"), and a second look at what the
+  rules sorted, so it gets smarter on its own. See [On-phone AI](#on-phone-ai-gemini-nano).
+- **Optional AI summaries.** With an AI key, waiting groups get that one line even while NotiSift is closed. Off by default.
 - **It learns from you.** Swipe right = "this was important", swipe left = done. Each correction becomes a rule for
   similar notifications, and every change can be undone.
 - **Safe by default.** Codes, messages from people, money movement, calls and alarms are never hidden automatically.
@@ -196,6 +198,24 @@ If you skipped part of the setup, the status card on Home shows the one next ste
 **Turn off** on the status card stops NotiSift completely: nothing is read, logged or sent anywhere.
 
 ### 3. Optional: add an AI model
+
+#### On-phone AI (Gemini Nano)
+
+Newer phones with Google's AICore (Pixel 8 and later, recent Galaxy S and Z models, others) have **Gemini Nano** built
+in. NotiSift uses it by default, with no key, and nothing leaves the phone. *Settings → On-phone AI* shows whether your
+phone has it.
+
+- **Summaries.** While NotiSift is open, it writes the one-line summary on each waiting group in the drawer.
+- **Learning.** It takes a second look at up to 10 kinds of recent notifications the built-in rules sorted. Answers it
+  is very sure of (95%+) are remembered, so the next ones like them are sorted that way even with the app closed.
+- **Never** chats, codes, money, or anything you set yourself. With your own AI key set up, that model's answers stand.
+- **Why only while open:** Android lets apps use Gemini Nano only while they are on screen. Notifications that arrive
+  with the app closed are sorted by your AI key or the built-in rules, as before.
+- The first time, Android may download the model. It often waits for wifi and charging.
+
+Phones without Gemini Nano work exactly as before. The rest of this section is about adding a cloud or local model.
+
+#### A cloud or local model
 
 Without a model NotiSift uses built-in rules on the phone, which already handle messages, codes, money, deliveries,
 promos and app types. A model is better at the in-between cases ("is this Amazon notification a delivery or a deal?").
@@ -382,6 +402,7 @@ still sees them.
   money or calls. Codes, conversations, calls, alarms and ongoing notifications are decided on the phone and never sent.
 - *AI summary on waiting groups* (off by default) sends the titles and texts of waiting groups, including muted or
   quieted group chats, to your provider for one line per group. Codes and money groups are never sent.
+- **On-phone AI (Gemini Nano)** runs on the phone itself; what it reads never leaves the phone.
 - Use Ollama or LM Studio on your LAN, or turn AI off, to keep everything local.
 - Notification text is treated as untrusted. Prompts tell the model to ignore instructions inside it, and the
   answer is validated against a fixed set of actions and groups.
@@ -392,6 +413,8 @@ still sees them.
   observed. It improves the longer it runs.
 - After NotiSift is updated or restarted by the system, rebuilt Important rows open the app rather than the
   exact chat (see above).
+- On-phone AI only works while NotiSift is on screen (an Android rule for Gemini Nano), so it teaches the rules
+  rather than sorting live.
 - `QUERY_ALL_PACKAGES` is used for the full app scan. Fine for sideloading and F-Droid; Google Play would need
   a justification.
 
