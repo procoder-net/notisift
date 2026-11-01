@@ -29,6 +29,46 @@ NotiSift decides **per notification**: what matters stays on top, the noise wait
 >   the drawer, waits in **Cleared** so you can restore it. New installs start in **Preview**, where nothing moves
 >   until you say so.
 
+## ✨ New: talk to your notifications, on your phone's own AI
+
+<p align="center">
+  <img src="docs/talk-to-notisift.gif" width="360" alt="Animated: typing 'mute instagram' gives a rule card, Add applies it with Undo; then 'did my package ship?' lists the matching notifications (demo data)">
+</p>
+
+- **💬 Talk to NotiSift.** Type a rule the way you'd say it: *"Mute Instagram"*, *"Family group only when someone
+  tags me"*, *"News can wait"*. It becomes rule cards you confirm with one tap, and one Undo takes it all back. Or
+  ask: *"Did my package ship?"*, *"What was that Chase code?"* (codes only with the on-phone AI), and get the answer with the notifications it came from.
+- **📱 Runs on your phone's own AI.** On phones with Gemini Nano (recent Pixel, Galaxy S and Galaxy Z models and others; *Settings → On-phone AI* tells you)
+  NotiSift uses it by default: **no key, no account, no cost, and nothing leaves the phone.** It writes the one-line
+  summary on each waiting group and learns from what the rules sorted.
+- **⬆ Important on top.** When you open NotiSift, the on-phone AI reads today's Later pile and moves up the few that
+  can't wait (*"arriving today"*, *"gate changed"*). One tap puts any back, and that kind never moves up again.
+- **🕓 A notification scheduler.** Have everything that can wait arrive at the times you pick (say 9 am and 6 pm)
+  instead of all day, while what needs you now still gets through.
+
+<p align="center">
+  <img src="docs/screenshots/15-talk-rule.png" width="260" alt="Typing 'mute instagram' shows a card: Instagram → Always junk (quiet), with Add and Cancel">
+  <img src="docs/screenshots/16-talk-answer.png" width="260" alt="Asking 'did my package ship?' lists the Amazon and Nest notifications that match">
+</p>
+
+### 💸 What it costs: nothing, or close to it
+
+| How NotiSift decides | Cost | Your notifications go to |
+|---|---|---|
+| **Built-in rules** (always on) | **Free** | Nowhere: on the phone |
+| **On-phone AI** (Gemini Nano, where the phone has it) | **Free** | Nowhere: on the phone |
+| **A model on your own computer** (Ollama, LM Studio) | **Free** | Your computer, on your wifi |
+| **Free tiers** (Gemini, Groq) | **Free** within their limits | That provider |
+| **Any cloud decision model** (Perplexity, OpenAI, Anthropic, OpenRouter…) | **Usually well under $1 a month** (estimate below) | That provider |
+
+Why a cloud model costs so little here: most notifications never reach it. Codes, chats, calls and alarms are decided
+on the phone; duplicates are skipped; once the model is sure about a kind of notification ("Amazon: out for
+delivery"), NotiSift remembers the answer and stops asking; and several questions go in one request.
+
+> **Estimate, not a quote:** 300 notifications a day, about a third reaching the model, a few hundred tokens each, is
+> roughly 1–2 million tokens a month. With a small model priced around $0.10–0.50 per million input tokens, that is
+> **about $0.10–$1 a month**. Check your provider's current price; NotiSift shows which provider it uses.
+
 <p align="center">
   <a href="https://github.com/procoder-net/notisift/releases/latest"><b>⬇️ Download the latest APK</b></a>
   · <a href="#get-started">Setup guide</a>
@@ -201,7 +241,7 @@ If you skipped part of the setup, the status card on Home shows the one next ste
 
 #### On-phone AI (Gemini Nano)
 
-Newer phones with Google's AICore (Pixel 8 and later, recent Galaxy S and Z models, others) have **Gemini Nano** built
+Newer phones with Google's AICore (recent Pixel, Galaxy S and Galaxy Z models, and others) have **Gemini Nano** built
 in. NotiSift uses it by default, with no key, and nothing leaves the phone. *Settings → On-phone AI* shows whether your
 phone has it.
 
@@ -469,6 +509,8 @@ debug-signed build. Locally, put the same values in a gitignored `keystore.prope
 (`storeFile`, `storePassword`, `keyAlias`, `keyPassword`) and run `./gradlew :app:assembleRelease :app:bundleRelease`.
 
 ## Contributing
+
+**Spread the word:** ready-made posts, store text and taglines are in [docs/MARKETING.md](docs/MARKETING.md).
 
 NotiSift gets better with every phone it runs on, and contributions are very welcome, no Android experience needed
 for most of them:
