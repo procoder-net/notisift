@@ -259,6 +259,7 @@ and keeps its data).
 | One-line AI summary on each waiting group | **Settings → Groups** → *AI summary on waiting groups* (needs an AI key) |
 | Get @mentions through from muted groups | **Settings → Your choices** → *Names people @mention you by* |
 | Pause for a while | Quick Settings tile, or **⋯ → Preview only** on the status card |
+| Bring back the larger Home cards | **Settings → Advanced** → *Compact Home* off. The line under it shows, on this phone only, how often each layout led to an action |
 | Move to a new phone | **Settings → Move to a new phone → Export**, then **Import** the file on the new phone. Brings app choices, corrections, keyword and chat rules, groups and settings; never your API key or notification history |
 
 Your choices always win over the AI. Protected groups (people, codes, money, calls) can be pinned on top but never hidden.
@@ -414,6 +415,7 @@ scripts/            e2e-deeplink.sh
 
 ```bash
 ./gradlew :app:testDebugUnitTest :app:lintDebug   # unit tests + lint
+./gradlew :app:connectedDemoAndroidTest           # UI tests on a device or emulator (installs the demo app beside yours)
 ./gradlew :app:assembleDebug                      # your own debug build (.env key included)
 ./gradlew :app:assemblePersonal                   # signed release app + your .env key, for your own phone
 ./gradlew :app:assembleDemo                       # demo build with made-up data, for screenshots

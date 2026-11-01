@@ -63,6 +63,8 @@ data class AppSettings(
     val onDeviceAi: Boolean = true,
     /** Chats the user said "Not now" to when asked to quiet them, one key per line. */
     val chatTipsSkipped: String = "",
+    /** Home leads with the notifications: a one-line status, tiers pinned on scroll, slim tips. Off = the classic cards. */
+    val compactHome: Boolean = true,
 ) {
     val modelConfig: ModelConfig get() = ProviderDetector.resolve(provider, apiKey, baseUrl, model, BuildConfig.ENV_API_KEY_NAME)
 
@@ -115,6 +117,7 @@ class SettingsStore(private val context: Context) {
         val aiSummaries = booleanPreferencesKey("ai_summaries")
         val onDeviceAi = booleanPreferencesKey("on_device_ai")
         val chatTipsSkipped = stringPreferencesKey("chat_tips_skipped")
+        val compactHome = booleanPreferencesKey("compact_home")
     }
 
     val flow: Flow<AppSettings> = context.store.data.map(::read)
@@ -148,6 +151,7 @@ class SettingsStore(private val context: Context) {
             aiSummaries = p[K.aiSummaries] ?: d.aiSummaries,
             onDeviceAi = p[K.onDeviceAi] ?: d.onDeviceAi,
             chatTipsSkipped = p[K.chatTipsSkipped] ?: d.chatTipsSkipped,
+            compactHome = p[K.compactHome] ?: d.compactHome,
         )
     }
 
@@ -180,6 +184,7 @@ class SettingsStore(private val context: Context) {
         p[K.aiSummaries] = s.aiSummaries
         p[K.onDeviceAi] = s.onDeviceAi
         p[K.chatTipsSkipped] = s.chatTipsSkipped.take(20_000)
+        p[K.compactHome] = s.compactHome
     }
 
     suspend fun update(transform: (AppSettings) -> AppSettings) {

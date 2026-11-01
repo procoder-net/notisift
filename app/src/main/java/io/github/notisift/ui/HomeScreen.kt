@@ -1,5 +1,7 @@
 package io.github.notisift.ui
 
+import androidx.activity.compose.LocalActivity
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -52,8 +54,12 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleResumeEffect
+import io.github.notisift.R
 import io.github.notisift.data.Entry
+import io.github.notisift.data.HomeVariant
 import io.github.notisift.engine.BusyChat
 import io.github.notisift.engine.Category
 import io.github.notisift.engine.ChatMode
@@ -66,6 +72,7 @@ private const val CONFIRM_CLEAR_OVER = 50
  * Home: everything NotiSift moved out of the shade, and nothing that is still in it. Each notification
  * lives in exactly one place, so important ones are not listed here again. Cleared ones wait in Cleared.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun HomeScreen(vm: MainViewModel, modifier: Modifier, tier: String, onTier: (String) -> Unit, selectedCategory: String?, onCategory: (String?) -> Unit, onAddAiKey: () -> Unit,
     searchOpen: Boolean, onSearchOpen: (Boolean) -> Unit, scrollToTop: Int,
@@ -81,6 +88,19 @@ fun HomeScreen(vm: MainViewModel, modifier: Modifier, tier: String, onTier: (Str
     val visible = remember(entries, groups, selected) { if (selected != null) groups.getValue(selected) else entries }
     val settings by vm.settings.collectAsState()
     val byDay = settings?.groupByDay == true
+    val compact = settings?.compactHome ?: true
+    val stats by vm.homeStats.collectAsState()
+    val variant = HomeVariant.of(compact)
+    // The swipe hint teaches once: compact Home drops it after a visit where something was done. Decided when Home
+    // opens, so it never vanishes under the user's finger mid-visit.
+    var hintSeen by rememberSaveable(variant) { mutableStateOf<Boolean?>(null) }
+    LaunchedEffect(stats.isNotEmpty(), variant) { if (hintSeen == null && stats.isNotEmpty()) hintSeen = (stats[variant]?.acted ?: 0) > 0 }
+    val showHint = !compact || hintSeen == false
+    val activity = LocalActivity.current
+    LifecycleResumeEffect(Unit) {
+        vm.homeVisit()
+        onPauseOrDispose { if (activity?.isChangingConfigurations != true) vm.homeLeave() }
+    }
     val busy by vm.busyChats.collectAsState()
     var busyDismissed by rememberSaveable { mutableStateOf(false) }
     val quieted by vm.quietedGroups.collectAsState()
@@ -103,16 +123,16 @@ fun HomeScreen(vm: MainViewModel, modifier: Modifier, tier: String, onTier: (Str
     val onRestore: (List<Entry>) -> Unit = { list -> if (list.size > CONFIRM_CLEAR_OVER) confirmRestore = list else vm.restore(list) }
 
     val header: LazyListScope.() -> Unit = {
-        item(key = "status") { Box(Modifier.tourTarget("status")) { StatusCard(vm) } }
+        item(key = "status") { Box(Modifier.tourTarget("status")) { StatusCard(vm, compact) } }
         // Tiers scroll on their own row so big counts and large text never squeeze them; Clear all sits below.
-        item(key = "tiers") {
-            LazyRow(Modifier.padding(top = 4.dp).tourTarget("tiers"), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                items(Tier.entries) { t ->
-                    FilterChip(selected = !view.searching && shown == t, onClick = { endSearch(); onTier(t.id) }, label = { Text("${t.emoji} ${t.label} ${counts[t] ?: 0}") })
-                }
-                item { FilterChip(selected = view.cleared, onClick = { endSearch(); onTier(HomeView.CLEARED) }, label = { Text("↩️ Cleared $clearedCount") }) }
-            }
+        // Compact Home pins them, so switching tiers never means scrolling back up.
+        val tierBar: @Composable () -> Unit = {
+            TierBar(
+                selected = shown.takeIf { !view.searching }, cleared = view.cleared, counts = counts, clearedCount = clearedCount, pinned = compact,
+                onTier = { endSearch(); onTier(it) }, modifier = Modifier.padding(top = if (compact) 0.dp else 4.dp).tourTarget("tiers"),
+            )
         }
+        if (compact) stickyHeader(key = "tiers") { tierBar() } else item(key = "tiers") { tierBar() }
         if (searchOpen) item(key = "search") {
             // Opening search means typing next, so the field takes focus and the keyboard comes up.
             val focus = remember { FocusRequester() }
@@ -123,7 +143,10 @@ fun HomeScreen(vm: MainViewModel, modifier: Modifier, tier: String, onTier: (Str
             )
         }
         if (nothingYet && settings?.stopped == false) item(key = "sample") { SampleInbox() }
-        if (offerAi) item(key = "ai") { AiKeyCard(onAddKey = onAddAiKey, onNotNow = { vm.updateSettings { it.copy(aiTipDismissed = true) } }) }
+        if (offerAi) item(key = "ai") {
+            val notNow = { vm.updateSettings { it.copy(aiTipDismissed = true) } }
+            if (compact) AiKeyBanner(onAddKey = onAddAiKey, onNotNow = notNow) else AiKeyCard(onAddKey = onAddAiKey, onNotNow = notNow)
+        }
         if (quieted.isNotEmpty() && !quietedSeen) item(key = "quieted") {
             QuietedGroupsCard(quieted, onKeep = { vm.keepGroupsOnTop(quieted) }, onOk = { quietedSeen = true })
         }
@@ -133,8 +156,13 @@ fun HomeScreen(vm: MainViewModel, modifier: Modifier, tier: String, onTier: (Str
         if (busy.isNotEmpty() && !busyDismissed) item(key = "busy") { BusyChatsCard(busy, onMentions = { vm.setChatModes(busy, ChatMode.MENTIONS) }, onLater = { busyDismissed = true }) }
         if (shown != null && entries.isNotEmpty()) item(key = "clear-all") {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                FilterChip(selected = !byDay, onClick = { vm.setGroupByDay(false) }, label = { Text("By group") })
-                FilterChip(selected = byDay, onClick = { vm.setGroupByDay(true) }, label = { Text("By day") })
+                // Compact: one "By day" switch-chip instead of a two-chip choice.
+                if (compact) {
+                    FilterChip(selected = byDay, onClick = { vm.setGroupByDay(!byDay) }, label = { Text(stringResource(R.string.home_by_day)) })
+                } else {
+                    FilterChip(selected = !byDay, onClick = { vm.setGroupByDay(false) }, label = { Text("By group") })
+                    FilterChip(selected = byDay, onClick = { vm.setGroupByDay(true) }, label = { Text("By day") })
+                }
                 Spacer(Modifier.weight(1f))
                 TextButton(onClick = { if (tierTotal > CONFIRM_CLEAR_OVER) confirmClear = shown else vm.clearAll(shown) }) { Text("Clear all $tierTotal") }
             }
@@ -187,10 +215,10 @@ fun HomeScreen(vm: MainViewModel, modifier: Modifier, tier: String, onTier: (Str
                 item { CategoryRow(null, entries.size, selected == null) { onCategory(null) } }
                 items(groups.keys.toList()) { c -> CategoryRow(c, groups.getValue(c).size, selected == c) { onCategory(c.id) } }
             }
-            EntryList(vm, sections, view.cleared, Modifier.weight(1f), listState, onRestore, header, footer)
+            EntryList(vm, sections, view.cleared, showHint, Modifier.weight(1f), listState, onRestore, header, footer)
         }
     } else {
-        EntryList(vm, sections, view.cleared, modifier, listState, onRestore, header, footer)
+        EntryList(vm, sections, view.cleared, showHint, modifier, listState, onRestore, header, footer)
     }
 }
 
@@ -235,7 +263,7 @@ private fun CategoryRow(category: Category?, count: Int, selected: Boolean, onCl
 
 @Composable
 private fun EntryList(
-    vm: MainViewModel, sections: List<Section>, cleared: Boolean, modifier: Modifier, listState: LazyListState,
+    vm: MainViewModel, sections: List<Section>, cleared: Boolean, showHint: Boolean, modifier: Modifier, listState: LazyListState,
     onRestore: (List<Entry>) -> Unit, header: LazyListScope.() -> Unit, footer: LazyListScope.() -> Unit,
 ) {
     // Tap a header to fold it away, like a stack in the drawer.
@@ -243,7 +271,7 @@ private fun EntryList(
     var opened by remember { mutableStateOf(emptySet<String>()) }
     LazyColumn(modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         header()
-        if (sections.isNotEmpty()) item(key = "hint") {
+        if (sections.isNotEmpty() && (showHint || cleared)) item(key = "hint") {
             Text(
                 if (cleared) "Swipe → or tap Restore to put one back" else "Swipe → to show in the drawer · swipe ← when done",
                 Modifier.tourTarget("swipe"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
