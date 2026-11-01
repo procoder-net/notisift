@@ -51,7 +51,7 @@ class SiftApp : Application() {
     val engineStore by lazy { RoomEngineStore(dao) }
     val engine by lazy { DecisionEngine(engineStore, ::currentModel) }
     val digest by lazy { DigestNotifier(this) }
-    val nano by lazy { GeminiNano() }
+    val nano by lazy { GeminiNano(scope) }
     private val tidy by lazy { OnPhoneTidy(engine) }
 
     /** NotiSift is on screen: the only time Android lets the phone's own AI answer. */

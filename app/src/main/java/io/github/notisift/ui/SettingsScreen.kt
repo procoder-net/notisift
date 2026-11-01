@@ -362,7 +362,7 @@ private fun OnPhoneAiRow(vm: MainViewModel, on: Boolean) {
         !on -> "Off. Summaries and sorting use your AI key or the built-in rules"
         status == NanoStatus.READY -> "Ready. While NotiSift is open it writes the group summaries and learns from what the rules sorted. " +
             "Nothing leaves the phone" + if (learned > 0) ". Learned $learned kinds of notification so far" else ""
-        status == NanoStatus.DOWNLOADING -> "Getting the phone's AI ready (a one-time download)…"
+        status == NanoStatus.DOWNLOADING -> "Android is getting the phone's AI ready (a one-time download). Wifi and charging help"
         status == NanoStatus.CHECKING -> "Checking this phone…"
         else -> "This phone doesn't have it. NotiSift uses your AI key or the built-in rules"
     }
