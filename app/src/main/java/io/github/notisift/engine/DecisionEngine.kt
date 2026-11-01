@@ -122,16 +122,42 @@ class DecisionEngine(
     private fun mentionNames(n: NotificationInput, s: EngineSettings) =
         s.myNames + n.selfName.takeUnless { it.isBlank() || it.equals("you", ignoreCase = true) }.let(::listOfNotNull)
 
-    private suspend fun decideFresh(n: NotificationInput, settings: EngineSettings, template: String, cacheable: Boolean): Verdict {
+    /**
+     * Asks [client] about a notification the offline rules sorted, and keeps a confident answer for its template, so
+     * the next one like it is sorted that way even when no AI can be reached. Only for apps NotiSift decides on its
+     * own (no app or chat choice), never for conversations, and never over a correction or a learned answer.
+     * [client]'s confidence is its own guess, not a calibrated probability, so the bar is higher than for a live
+     * answer, and what it learns says where it came from.
+     */
+    suspend fun learn(n: NotificationInput, settings: EngineSettings, client: DecisionModel): Learned {
+        if (n.isUnreadable || LocalRules.protect(n) != null || LocalRules.isConversation(n)) return Learned.SKIPPED
+        val mode = store.appMode(n.packageName) ?: if (settings.manageUnlistedApps) AppMode.AUTO else return Learned.SKIPPED
+        if (mode != AppMode.AUTO || store.cached(n.templateKey) != null) return Learned.SKIPPED
+        val v = decideFresh(n, settings, n.templateKey, cacheable = false, client)
+        return when {
+            learnable(v) && v.confidence >= LEARN_UNCALIBRATED -> {
+                store.remember(n.templateKey, v.copy(reason = "On-phone AI · ${v.reason}"))
+                Learned.YES
+            }
+            v.reason == MODEL_UNAVAILABLE -> Learned.FAILED
+            else -> Learned.NOT_SURE
+        }
+    }
+
+    enum class Learned { YES, NOT_SURE, SKIPPED, FAILED }
+
+    private suspend fun decideFresh(
+        n: NotificationInput, settings: EngineSettings, template: String, cacheable: Boolean, override: DecisionModel? = null,
+    ): Verdict {
         val appCategory = store.appCategory(n.packageName)
-        val client = model() ?: return guard(withChoice(Heuristics.classify(n, appCategory), settings), n, settings.inboxMode)
+        val client = override ?: model() ?: return guard(withChoice(Heuristics.classify(n, appCategory), settings), n, settings.inboxMode)
         val verdict = try {
             withTimeoutOrNull(settings.modelTimeoutMs) { ask(client, n, appCategory, settings) }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             null
-        } ?: return Verdict(Action.KEEP, Heuristics.category(n, appCategory), 0.0, Source.FALLBACK, "Model unavailable")
+        } ?: return Verdict(Action.KEEP, Heuristics.category(n, appCategory), 0.0, Source.FALLBACK, MODEL_UNAVAILABLE)
 
         // The AI said "other": the on-phone rules often know better (app type, keywords).
         // A news, social, video or game app's notifications belong to the app's group whatever the AI read into them.
@@ -150,9 +176,11 @@ class DecisionEngine(
         }
         val guarded = guard(decided, n, settings.inboxMode)
         // Learn only reversible outcomes; a generalised BLOCK/SILENCE could hide a different notification.
-        if (cacheable && guarded.source == Source.MODEL && guarded.confidence >= 0.9 && (guarded.action == Action.KEEP || guarded.action == Action.BUNDLE)) store.remember(template, guarded)
+        if (cacheable && learnable(guarded)) store.remember(template, guarded)
         return guarded
     }
+
+    private fun learnable(v: Verdict) = v.source == Source.MODEL && v.confidence >= LEARN_CONFIDENCE && (v.action == Action.KEEP || v.action == Action.BUNDLE)
 
     /** Applies the user's choice for the verdict's group, if they made one (protected groups only allow Important). */
     private fun withChoice(v: Verdict, settings: EngineSettings): Verdict {
@@ -217,6 +245,9 @@ class DecisionEngine(
     companion object {
         const val DUPLICATE_WINDOW_MS = 10 * 60 * 1000L
         const val BUNDLE_MARGIN = 0.15
+        const val LEARN_CONFIDENCE = 0.9
+        const val LEARN_UNCALIBRATED = 0.95
+        private const val MODEL_UNAVAILABLE = "Model unavailable"
 
         /** [requests] = [action, category]. "unsure" and answers outside the options become KEEP or no answer. */
         fun toVerdict(requests: List<DecisionRequest>, results: List<DecisionResult>): Verdict? {

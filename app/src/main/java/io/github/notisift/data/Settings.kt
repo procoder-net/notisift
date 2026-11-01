@@ -59,6 +59,8 @@ data class AppSettings(
     val laterTimes: String = "",
     /** One AI-written line on each waiting group in the drawer. Off by default: it sends those notifications to the AI. */
     val aiSummaries: Boolean = false,
+    /** The phone's own AI (Gemini Nano), where the phone has it: summaries and learning while NotiSift is open. */
+    val onDeviceAi: Boolean = true,
     /** Chats the user said "Not now" to when asked to quiet them, one key per line. */
     val chatTipsSkipped: String = "",
     /** Home leads with the notifications: a one-line status, tiers pinned on scroll, slim tips. Off = the classic cards. */
@@ -113,6 +115,7 @@ class SettingsStore(private val context: Context) {
         val smartGroups = booleanPreferencesKey("smart_groups")
         val laterTimes = stringPreferencesKey("later_times")
         val aiSummaries = booleanPreferencesKey("ai_summaries")
+        val onDeviceAi = booleanPreferencesKey("on_device_ai")
         val chatTipsSkipped = stringPreferencesKey("chat_tips_skipped")
         val compactHome = booleanPreferencesKey("compact_home")
     }
@@ -146,6 +149,7 @@ class SettingsStore(private val context: Context) {
             smartGroups = p[K.smartGroups] ?: d.smartGroups,
             laterTimes = p[K.laterTimes] ?: d.laterTimes,
             aiSummaries = p[K.aiSummaries] ?: d.aiSummaries,
+            onDeviceAi = p[K.onDeviceAi] ?: d.onDeviceAi,
             chatTipsSkipped = p[K.chatTipsSkipped] ?: d.chatTipsSkipped,
             compactHome = p[K.compactHome] ?: d.compactHome,
         )
@@ -178,6 +182,7 @@ class SettingsStore(private val context: Context) {
         p[K.smartGroups] = s.smartGroups
         p[K.laterTimes] = io.github.notisift.engine.LaterSchedule.parse(s.laterTimes).joinToString(",")
         p[K.aiSummaries] = s.aiSummaries
+        p[K.onDeviceAi] = s.onDeviceAi
         p[K.chatTipsSkipped] = s.chatTipsSkipped.take(20_000)
         p[K.compactHome] = s.compactHome
     }

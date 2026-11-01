@@ -41,6 +41,7 @@ data class BackupSettings(
     val smartGroups: Boolean = true,
     val laterTimes: String = "",
     val aiSummaries: Boolean = false,
+    val onDeviceAi: Boolean = true,
 )
 
 @Serializable
@@ -69,6 +70,7 @@ object Backup {
             inboxMode = settings.inboxMode, replaceShade = settings.replaceShade, digest = settings.digest,
             groupByDay = settings.groupByDay, manageUnlistedApps = settings.manageUnlistedApps, retentionDays = settings.retentionDays,
             smartGroups = settings.smartGroups, laterTimes = settings.laterTimes, aiSummaries = settings.aiSummaries,
+            onDeviceAi = settings.onDeviceAi,
         ),
         // Only apps you (or a suggestion you accepted) set: scan suggestions are redone on the new phone.
         apps = policies.filter { it.mode.isNotBlank() }.map { BackupApp(it.packageName, it.label, it.mode, it.instructions) },
@@ -109,5 +111,6 @@ object Backup {
         categoryChoices = s.categoryChoices, inboxMode = s.inboxMode, replaceShade = s.replaceShade, digest = s.digest,
         groupByDay = s.groupByDay, manageUnlistedApps = s.manageUnlistedApps, retentionDays = s.retentionDays,
         smartGroups = s.smartGroups, laterTimes = s.laterTimes, aiSummaries = s.aiSummaries,
+        onDeviceAi = s.onDeviceAi,
     )
 }
