@@ -5,11 +5,15 @@ import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.drawable.Icon
 import android.os.Build
+import android.os.PowerManager
 import android.util.Log
+import androidx.core.content.ContextCompat
 import io.github.notisift.BuildConfig
 import io.github.notisift.MainActivity
 import io.github.notisift.R
@@ -27,8 +31,6 @@ import io.github.notisift.ui.topGroups
 import io.github.notisift.ui.drawerDays
 import io.github.notisift.ui.emoji
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -40,7 +42,6 @@ import kotlinx.coroutines.sync.withLock
 class DigestNotifier(private val context: Context) {
     private val manager = context.getSystemService(NotificationManager::class.java)
     private val app get() = context.applicationContext as SiftApp
-    private var pending: Job? = null
     private val pacer = Pacer()
     val important = ImportantStack(context, manager, pacer) { open(Tier.LATER, null) }
     private val summaries = GroupSummaries({ request -> app.summarizer()?.invoke(request) })
@@ -68,21 +69,27 @@ class DigestNotifier(private val context: Context) {
         )
     }
 
-    /** Coalesces bursts so a dozen promos produce one update, not twelve. */
-    @Synchronized
-    fun requestRefresh() {
-        pending?.cancel()
-        pending = app.scope.launch {
-            delay(1500)
-            try {
-                refresh()
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                // A transient binder or database error must not take the listener down with it.
-                Log.w("NotiSift", "Drawer refresh failed", e)
-            }
+    /** Coalesces bursts so a dozen promos produce one update, not twelve, and holds them while the screen is off. */
+    fun requestRefresh() = scheduler.request()
+
+    private val scheduler = RefreshScheduler(app.scope, { context.getSystemService(PowerManager::class.java).isInteractive }) {
+        try {
+            refresh()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // A transient binder or database error must not take the listener down with it.
+            Log.w("NotiSift", "Drawer refresh failed", e)
         }
+    }.also { scheduler ->
+        ContextCompat.registerReceiver(
+            context.applicationContext,
+            object : BroadcastReceiver() {
+                override fun onReceive(c: Context, intent: Intent) = scheduler.screenOn()
+            },
+            IntentFilter(Intent.ACTION_SCREEN_ON),
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
     }
 
     /**
